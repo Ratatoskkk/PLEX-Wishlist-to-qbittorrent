@@ -1,6 +1,7 @@
 import os
 import time
 from plexapi.myplex import MyPlexAccount
+from plexapi.server import PlexServer
 import database
 import downloader
 import shutil
@@ -17,10 +18,19 @@ DOWNLOAD_DIR_2 = os.getenv('DOWNLOAD_DIR_2', 'E:\\Torrent')
 def check_watchlist():
     try:
         account = MyPlexAccount(token=PLEX_TOKEN)
+        
+        # Connect to local server to check watch history
+        try:
+            plex = PlexServer(PLEX_URL, PLEX_TOKEN)
+        except Exception as e:
+            print(f"Warning: Could not connect to local Plex Server at {PLEX_URL} to verify watch history. TV Shows will assume 0 watch history.")
+            plex = None
+            
         watchlist = account.watchlist()
         
         for item in watchlist:
             title = item.title
+            item_type = getattr(item, 'type', 'movie')
             
             # Find TMDB ID if available from GUIDs
             tmdb_id = None
@@ -29,38 +39,86 @@ def check_watchlist():
                     tmdb_id = guid.id.replace('tmdb://', '')
                     break
 
-            print(f"Checking watchlist item: {title} (TMDB: {tmdb_id})")
+            print(f"Checking watchlist item: {title} (TMDB: {tmdb_id}) Type: {item_type}")
             
-            # Search Aither
-            best_torrent = downloader.search_aither(title, tmdb_id)
-            
-            if best_torrent:
-                size_bytes = best_torrent.get('size', 0)
-                download_link = best_torrent.get('download_link')
-                aither_id = str(best_torrent.get('id', ''))
-                resolution = best_torrent.get('resolution', 'Unknown')
+            if item_type == 'movie':
+                # Existing Movie Logic
+                best_torrent = downloader.search_aither(title, tmdb_id)
                 
-                # The size is returned in raw Bytes by the API
-                # 100GB limit logic:
-                is_large = float(size_bytes) > (100 * 1024 * 1024 * 1024)
+                if best_torrent:
+                    size_bytes = best_torrent.get('size', 0)
+                    download_link = best_torrent.get('download_link')
+                    aither_id = str(best_torrent.get('id', ''))
+                    resolution = best_torrent.get('resolution', 'Unknown')
+                    
+                    is_large = float(size_bytes) > (100 * 1024 * 1024 * 1024)
+                    status = 'pending_approval' if is_large else 'queued'
+                    
+                    database.record_download(
+                        title=title, 
+                        tmdb_id=tmdb_id, 
+                        file_size_bytes=float(size_bytes), 
+                        status=status,
+                        aither_torrent_id=aither_id,
+                        download_link=download_link,
+                        resolution=resolution
+                    )
+                    
+                    account.removeFromWatchlist(item)
+                    print(f"Processed and queued {title} from watchlist.")
+                else:
+                    print(f"No suitable torrent found for {title}.")
+
+            elif item_type == 'show':
+                # Advanced TV Show Logic
+                watched_seasons = []
+                if plex:
+                    try:
+                        local_results = plex.search(title, libtype='show')
+                        if local_results:
+                            local_show = local_results[0]
+                            # Only parse if title matches to prevent weird search overlap
+                            if local_show.title.lower() == title.lower():
+                                for season in local_show.seasons():
+                                    if season.isWatched:
+                                        watched_seasons.append(season.seasonNumber)
+                    except Exception as e:
+                        print(f"Error checking local Plex explicitly for {title}: {e}")
                 
-                status = 'pending_approval' if is_large else 'queued'
+                available_packs = downloader.search_aither_tv(title, tmdb_id)
+                queued_any = False
                 
-                db_id = database.record_download(
-                    title=title, 
-                    tmdb_id=tmdb_id, 
-                    file_size_bytes=float(size_bytes), 
-                    status=status,
-                    aither_torrent_id=aither_id,
-                    download_link=download_link,
-                    resolution=resolution
-                )
+                for season_num, best_torrent in available_packs.items():
+                    # Skip 'Specials' (0) and any explicitly completed season
+                    if season_num == 0 or season_num in watched_seasons:
+                        continue
+                        
+                    size_bytes = best_torrent.get('size', 0)
+                    download_link = best_torrent.get('download_link')
+                    aither_id = str(best_torrent.get('id', ''))
+                    resolution = best_torrent.get('resolution', 'Unknown')
+                    
+                    is_large = float(size_bytes) > (100 * 1024 * 1024 * 1024)
+                    status = 'pending_approval' if is_large else 'queued'
+                    
+                    season_title = f"{title} (Season {season_num})"
+                    
+                    database.record_download(
+                        title=season_title, 
+                        tmdb_id=tmdb_id, 
+                        file_size_bytes=float(size_bytes), 
+                        status=status,
+                        aither_torrent_id=aither_id,
+                        download_link=download_link,
+                        resolution=resolution
+                    )
+                    queued_any = True
                 
-                # Remove from watchlist
-                account.removeFromWatchlist(item)
-                print(f"Processed and queued {title} from watchlist.")
-            else:
-                print(f"No suitable torrent found for {title}.")
+                if queued_any:
+                    account.removeFromWatchlist(item)
+                    print(f"Processed TV Show {title}. Queued needed seasons.")
+                else:
+                    print(f"No suitable or un-watched seasons found on Aither for {title}.")
         
         database.update_last_checked()
         
