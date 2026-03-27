@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plex to Aither Automation</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- BoxIcons -->
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <div class="background-beams"></div>
+
+    <div class="container">
+        <header class="glass-panel main-header">
+            <div class="logo">
+                <i class='bx bxs-movie-play'></i>
+                <h1>PlexTracker</h1>
+            </div>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="pulse {% if last_error %}error{% else %}active{% endif %}"></span>
+                    <span>Worker: {% if last_error %}Error{% else %}Online{% endif %}</span>
+                </div>
+                <div class="last-checked">
+                    <i class='bx bx-time-five'></i> Last Checked: {{ last_check }}
+                </div>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }} glass-panel">
+                            <i class='bx {% if category == "success" %}bx-check-circle{% elif category == "error" %}bx-error-circle{% else %}bx-info-circle{% endif %}'></i>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <main class="dashboard-grid">
+            
+            <!-- Pending Approvals Section -->
+            <section class="glass-panel pending-section {% if pending_count == 0 %}empty{% endif %}">
+                <div class="section-header">
+                    <h2><i class='bx bx-error'></i> Action Required ({{ pending_count }})</h2>
+                    <p>Files over 100GB await your approval</p>
+                </div>
+                
+                <div class="items-list">
+                    {% for item in downloads %}
+                        {% if item.status == 'pending_approval' %}
+                            <div class="card pending-card">
+                                <div class="card-info">
+                                    <h3>{{ item.title }}</h3>
+                                    <div class="meta">
+                                        <span class="badge res">{{ item.resolution }}</span>
+                                        <span class="badge size">{{ "%.2f"|format(item.file_size_bytes / 1073741824) }} GB</span>
+                                    </div>
+                                    <span class="date">{{ item.added_date }}</span>
+                                </div>
+                                <div class="card-actions">
+                                    <form action="{{ url_for('approve', download_id=item.id) }}" method="POST">
+                                        <button class="btn btn-success" type="submit"><i class='bx bx-check'></i> Approve</button>
+                                    </form>
+                                    <form action="{{ url_for('deny', download_id=item.id) }}" method="POST">
+                                        <button class="btn btn-danger" type="submit"><i class='bx bx-x'></i> Deny</button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if pending_count == 0 %}
+                        <div class="empty-state">
+                            <i class='bx bx-check-double'></i>
+                            <p>All clear! No pending approvals.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Download History Section -->
+            <section class="glass-panel history-section">
+                <div class="section-header split">
+                    <div>
+                        <h2><i class='bx bx-history'></i> Recent History</h2>
+                        <p>Tracked automation events</p>
+                    </div>
+                    <form action="{{ url_for('clear_history') }}" method="POST" onsubmit="return confirm('Clear all completed history?');">
+                        <button class="btn btn-ghost btn-icon"><i class='bx bx-trash'></i></button>
+                    </form>
+                </div>
+                
+                <div class="history-list">
+                    {% for item in downloads %}
+                        <!-- We show all here, or maybe format pending differently -->
+                        <div class="history-item {% if item.status == 'pending_approval' %}highlight{% endif %}">
+                            <div class="history-icon {{ item.status }}">
+                                {% if item.status == 'downloading' %}
+                                    <i class='bx bx-cloud-download'></i>
+                                {% elif item.status == 'queued' %}
+                                    <i class='bx bx-loader bx-spin'></i>
+                                {% elif item.status == 'completed' %}
+                                    <i class='bx bx-check'></i>
+                                {% elif item.status == 'denied' %}
+                                    <i class='bx bx-block'></i>
+                                {% elif item.status == 'insufficient_space' %}
+                                    <i class='bx bx-hdd'></i>
+                                {% elif item.status == 'error' %}
+                                    <i class='bx bx-error-alt'></i>
+                                {% else %}
+                                    <i class='bx bx-time'></i>
+                                {% endif %}
+                            </div>
+                            <div class="history-content">
+                                <h4>{{ item.title }}</h4>
+                                <div class="history-meta">
+                                    <span>{{ item.resolution }}</span> • 
+                                    <span>{{ "%.2f"|format(item.file_size_bytes / 1073741824) }} GB</span> • 
+                                    <span class="status-text {{ item.status }}">{{ item.status|replace('_', ' ')|title }}</span>
+                                </div>
+                            </div>
+                            <div class="history-time">
+                                {{ item.added_date }}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="empty-state">
+                            <i class='bx bx-ghost'></i>
+                            <p>No history yet. Add something to your Plex Watchlist!</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        </main>
+    </div>
+
+</body>
+</html>
