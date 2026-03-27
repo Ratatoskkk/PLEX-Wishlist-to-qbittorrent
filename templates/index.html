@@ -28,6 +28,11 @@
                 <div class="last-checked">
                     <i class='bx bx-time-five'></i> Last Checked: {{ last_check }}
                 </div>
+                {% if last_error %}
+                <div class="last-error" style="color: #ff7675; font-size: 0.8rem; margin-top: 5px; max-width: 400px; overflow: hidden; text-overflow: ellipsis;" title="{{ last_error }}">
+                    <i class='bx bx-error-alt'></i> {{ last_error }}
+                </div>
+                {% endif %}
             </div>
         </header>
 
@@ -54,8 +59,51 @@
                 </div>
                 
                 <div class="items-list">
-                    {% for item in downloads %}
-                        {% if item.status == 'pending_approval' %}
+                    {% for group_title, group_items in pending_groups.items() %}
+                        {% if group_items|length > 1 %}
+                            <!-- Batch Group Display -->
+                            <div class="card pending-group-card" style="border: 1px solid rgba(108, 92, 231, 0.4); padding: 15px; border-radius: 12px; margin-bottom: 20px; background: rgba(0,0,0,0.2);">
+                                <div class="group-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                    <div>
+                                        <h3 style="margin: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 8px;">
+                                            <i class='bx bx-collection'></i> {{ group_title }} 
+                                            <span style="font-size: 0.8rem; background: rgba(108, 92, 231, 0.3); padding: 2px 8px; border-radius: 20px;">{{ group_items|length }} Seasons</span>
+                                        </h3>
+                                    </div>
+                                    <div class="group-actions" style="display: flex; gap: 8px;">
+                                        <form action="{{ url_for('approve_group', title=group_title|urlencode) }}" method="POST">
+                                            <button class="btn btn-success" type="submit"><i class='bx bx-check-double'></i> Approve All</button>
+                                        </form>
+                                        <form action="{{ url_for('deny_group', title=group_title|urlencode) }}" method="POST">
+                                            <button class="btn btn-danger" type="submit"><i class='bx bx-x'></i> Deny All</button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <div class="group-items" style="display: flex; flex-direction: column; gap: 8px; padding-left: 15px; border-left: 2px solid rgba(255,255,255,0.1);">
+                                    {% for item in group_items %}
+                                        <div class="card pending-card" style="margin-bottom: 0; padding: 12px; background: rgba(255,255,255,0.02); min-height: unset;">
+                                            <div class="card-info">
+                                                <h4 style="margin: 0 0 5px 0;">{{ item.title }}</h4>
+                                                <div class="meta" style="margin-bottom: 0;">
+                                                    <span class="badge res">{{ item.resolution }}</span>
+                                                    <span class="badge size">{{ "%.2f"|format(item.file_size_bytes / 1073741824) }} GB</span>
+                                                </div>
+                                            </div>
+                                            <div class="card-actions">
+                                                <form action="{{ url_for('approve', download_id=item.id) }}" method="POST">
+                                                    <button class="btn btn-success btn-icon" type="submit" title="Approve"><i class='bx bx-check'></i></button>
+                                                </form>
+                                                <form action="{{ url_for('deny', download_id=item.id) }}" method="POST">
+                                                    <button class="btn btn-danger btn-icon" type="submit" title="Deny"><i class='bx bx-x'></i></button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <!-- Single Item Display -->
+                            {% set item = group_items[0] %}
                             <div class="card pending-card">
                                 <div class="card-info">
                                     <h3>{{ item.title }}</h3>

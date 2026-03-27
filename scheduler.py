@@ -5,6 +5,8 @@ from plexapi.server import PlexServer
 import database
 import downloader
 import shutil
+import shutil
+import re
 from dotenv import load_dotenv
 
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -70,55 +72,174 @@ def check_watchlist():
                     print(f"No suitable torrent found for {title}.")
 
             elif item_type == 'show':
-                # Advanced TV Show Logic
+                # Advanced TV Show Logic with Dashboard Override
                 watched_seasons = []
+                watched_episodes = set()
+                
                 if plex:
                     try:
-                        local_results = plex.search(title, libtype='show')
+                        local_results = plex.library.search(title, libtype='show')
                         if local_results:
                             local_show = local_results[0]
-                            # Only parse if title matches to prevent weird search overlap
                             if local_show.title.lower() == title.lower():
+                                max_local_season = 0
+                                existing_seasons = []
+                                
                                 for season in local_show.seasons():
-                                    if season.isWatched:
-                                        watched_seasons.append(season.seasonNumber)
+                                    s_num = season.seasonNumber
+                                    if s_num == 0: continue
+                                    
+                                    existing_seasons.append(s_num)
+                                    if s_num > max_local_season:
+                                        max_local_season = s_num
+                                        
+                                    eps = season.episodes()
+                                    if not eps:
+                                        watched_seasons.append(s_num)
+                                    else:
+                                        all_watched = True
+                                        for ep in eps:
+                                            if ep.isWatched:
+                                                watched_episodes.add((s_num, ep.episodeNumber))
+                                            else:
+                                                all_watched = False
+                                        
+                                        if all_watched:
+                                            watched_seasons.append(s_num)
+                                            
+                                # Shield: Assume deleted past seasons are fully watched
+                                for s in range(1, max_local_season):
+                                    if s not in existing_seasons:
+                                        watched_seasons.append(s)
                     except Exception as e:
                         print(f"Error checking local Plex explicitly for {title}: {e}")
                 
-                available_packs = downloader.search_aither_tv(title, tmdb_id)
-                queued_any = False
+                available_data = downloader.search_aither_tv(title, tmdb_id)
+                season_packs = available_data.get('seasons', {})
+                single_eps = available_data.get('episodes', {})
                 
-                for season_num, best_torrent in available_packs.items():
-                    # Skip 'Specials' (0) and any explicitly completed season
-                    if season_num == 0 or season_num in watched_seasons:
+                existing_qbt_names = downloader.get_all_torrent_names()
+                
+                def is_already_downloaded(s_num, e_num=None):
+                    normalized_title_words = set(downloader.normalize_title(title))
+                    for t_name in existing_qbt_names:
+                        t_words = set(downloader.normalize_title(t_name))
+                        if normalized_title_words.issubset(t_words) or (title.lower() in t_name.lower()):
+                            if e_num:
+                                if re.search(rf'\bS{s_num:02d}[ .]?E{e_num:02d}\b', t_name, re.IGNORECASE):
+                                    return True
+                            else:
+                                match_s = re.search(r'\bS(\d{1,2})\b', t_name, re.IGNORECASE)
+                                has_episode = re.search(r'\bE(\d{1,2})\b', t_name, re.IGNORECASE)
+                                if match_s and not has_episode and int(match_s.group(1)) == s_num:
+                                    return True
+                    return False
+                
+                items_to_queue = []
+                distinct_seasons_queued = set()
+                
+                # 1. Gather Unwatched Season Packs
+                for s_num, best_t in season_packs.items():
+                    if s_num == 0 or s_num in watched_seasons: continue
+                    if is_already_downloaded(s_num):
+                        print(f"Skipping {title} Season {s_num} (Already in qBittorrent history).")
                         continue
                         
-                    size_bytes = best_torrent.get('size', 0)
-                    download_link = best_torrent.get('download_link')
-                    aither_id = str(best_torrent.get('id', ''))
-                    resolution = best_torrent.get('resolution', 'Unknown')
+                    name = f"{title} (Season {s_num})"
+                    items_to_queue.append((best_t, name))
+                    distinct_seasons_queued.add(s_num)
+                
+                # 2. Gather Unwatched Individual Episodes
+                for (s_num, e_num), best_t in single_eps.items():
+                    if s_num == 0: continue
+                    if (s_num, e_num) in watched_episodes: continue
+                    if s_num in watched_seasons: continue
+                    if s_num in season_packs: continue
+                    if is_already_downloaded(s_num, e_num):
+                        print(f"Skipping {title} S{s_num:02d}E{e_num:02d} (Already in qBittorrent history).")
+                        continue
                     
-                    is_large = float(size_bytes) > (100 * 1024 * 1024 * 1024)
-                    status = 'pending_approval' if is_large else 'queued'
+                    name = f"{title} (S{s_num:02d}E{e_num:02d})"
+                    items_to_queue.append((best_t, name))
+                    distinct_seasons_queued.add(s_num)
+                
+                force_pending = len(distinct_seasons_queued) > 1
+                
+                for t_dict, name in items_to_queue:
+                    size_bytes = float(t_dict.get('size', 0))
+                    is_large = size_bytes > (100 * 1024 * 1024 * 1024)
                     
-                    season_title = f"{title} (Season {season_num})"
+                    status = 'pending_approval' if (is_large or force_pending) else 'queued'
                     
                     database.record_download(
-                        title=season_title, 
+                        title=name, 
                         tmdb_id=tmdb_id, 
-                        file_size_bytes=float(size_bytes), 
+                        file_size_bytes=size_bytes, 
                         status=status,
-                        aither_torrent_id=aither_id,
-                        download_link=download_link,
-                        resolution=resolution
+                        aither_torrent_id=str(t_dict.get('id', '')),
+                        download_link=t_dict.get('download_link'),
+                        resolution=t_dict.get('resolution', 'Unknown')
                     )
-                    queued_any = True
                 
-                if queued_any:
+                if items_to_queue:
                     account.removeFromWatchlist(item)
-                    print(f"Processed TV Show {title}. Queued needed seasons.")
+                    msg = "forced pending approval (multi-season)" if force_pending else "queued"
+                    print(f"Processed TV Show {title}. 1:{len(items_to_queue)} items {msg}.")
                 else:
-                    print(f"No suitable or un-watched seasons found on Aither for {title}.")
+                    print(f"No suitable or un-watched seasons/episodes found on Aither for {title}.")
+                
+            elif item_type == 'season':
+                # Explicit Season Handling
+                show_title = getattr(item, 'parentTitle', title)
+                season_num = getattr(item, 'index', 1) 
+                
+                print(f"Processing explicit Season Watchlist: {show_title} Season {season_num}")
+                available_data = downloader.search_aither_tv(show_title, tmdb_id)
+                season_packs = available_data.get('seasons', {})
+                
+                best_t = season_packs.get(season_num)
+                if best_t:
+                    is_large = float(best_t.get('size', 0)) > (100 * 1024 * 1024 * 1024)
+                    database.record_download(
+                        title=f"{show_title} (Season {season_num})", 
+                        tmdb_id=tmdb_id, 
+                        file_size_bytes=float(best_t.get('size', 0)), 
+                        status='pending_approval' if is_large else 'queued',
+                        aither_torrent_id=str(best_t.get('id', '')),
+                        download_link=best_t.get('download_link'),
+                        resolution=best_t.get('resolution', 'Unknown')
+                    )
+                    account.removeFromWatchlist(item)
+                    print(f"Successfully queued {show_title} Season {season_num}.")
+                else:
+                    print(f"No suitable pack found on Aither for {show_title} Season {season_num}.")
+                    
+            elif item_type == 'episode':
+                # Explicit Episode Handling for Ongoing Shows
+                show_title = getattr(item, 'grandparentTitle', title)
+                season_num = getattr(item, 'parentIndex', 1)
+                episode_num = getattr(item, 'index', 1)
+                
+                print(f"Processing explicit Episode Watchlist: {show_title} S{season_num:02d}E{episode_num:02d}")
+                available_data = downloader.search_aither_tv(show_title, tmdb_id)
+                episodes = available_data.get('episodes', {})
+                
+                best_t = episodes.get((season_num, episode_num))
+                if best_t:
+                    is_large = float(best_t.get('size', 0)) > (100 * 1024 * 1024 * 1024)
+                    database.record_download(
+                        title=f"{show_title} (S{season_num:02d}E{episode_num:02d})", 
+                        tmdb_id=tmdb_id, 
+                        file_size_bytes=float(best_t.get('size', 0)), 
+                        status='pending_approval' if is_large else 'queued',
+                        aither_torrent_id=str(best_t.get('id', '')),
+                        download_link=best_t.get('download_link'),
+                        resolution=best_t.get('resolution', 'Unknown')
+                    )
+                    account.removeFromWatchlist(item)
+                    print(f"Successfully queued {show_title} S{season_num:02d}E{episode_num:02d}.")
+                else:
+                    print(f"No suitable file found on Aither for {show_title} S{season_num:02d}E{episode_num:02d}.")
         
         database.update_last_checked()
         

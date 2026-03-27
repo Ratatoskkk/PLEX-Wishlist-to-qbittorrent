@@ -99,6 +99,102 @@ def filter_best_torrent(torrents):
     
     return valid_torrents[0][1] # Return the attributes of the best torrent
 
+def search_aither_tv(title, tmdb_id=None):
+    """
+    Finds season packs for a TV show and groups them by highest quality.
+    Returns: { season_number: best_torrent_dict }
+    """
+    headers = {
+        'Authorization': f'Bearer {AITHER_API_KEY}',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
+    params = {'perPage': '100'}
+    
+    if tmdb_id:
+        params['tmdbId'] = str(tmdb_id)
+    else:
+        params['name'] = title
+
+    try:
+        response = requests.get(AITHER_URL, headers=headers, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json().get('data', [])
+        if isinstance(data, dict) and 'data' in data:
+            data = data['data']
+        
+        torrents = data
+        seasons = {} 
+        episodes = {}
+        
+        for t in torrents:
+            attrs = t.get('attributes', {})
+            t_name = attrs.get('name', '')
+            if "full disc" in t_name.lower():
+                continue
+            
+            # Find Season Packs: Look for S01, S12 etc. but ensure there's no E01 (episode)
+            match_s = re.search(r'\bS(\d{1,2})\b', t_name, re.IGNORECASE)
+            match_e = re.search(r'\bE(\d{1,2})\b', t_name, re.IGNORECASE)
+            match_se = re.search(r'\bS(\d{1,2})[ .]?E(\d{1,2})\b', t_name, re.IGNORECASE)
+            
+            if match_se:
+                s_num = int(match_se.group(1))
+                e_num = int(match_se.group(2))
+                key = (s_num, e_num)
+                if key not in episodes:
+                    episodes[key] = []
+                episodes[key].append(t)
+            elif match_s and not match_e:
+                season_num = int(match_s.group(1))
+                if season_num not in seasons:
+                    seasons[season_num] = []
+                seasons[season_num].append(t)
+                
+        def score_torrents(torrent_list):
+            best_t = None
+            best_sc = -1
+            for t in torrent_list:
+                attrs = t.get('attributes', {})
+                t_name = attrs.get('name', '')
+                res = str(attrs.get('resolution', '')).lower()
+                
+                score = 0
+                if '2160p' in res or '4k' in res:
+                    score += 50
+                    if 'remux' in t_name.lower():
+                        score += 50
+                    if 'hdr' in t_name.lower() or 'dv' in t_name.lower():
+                        score += 20
+                elif '1080p' in res:
+                    score += 10
+                
+                if score > best_sc:
+                    best_sc = score
+                    best_t = {
+                        'id': t.get('id'),
+                        'name': t_name,
+                        'size': attrs.get('size', 0),
+                        'download_link': attrs.get('download_link'),
+                        'resolution': res if res else 'Unknown'
+                    }
+            return best_t
+
+        best_seasons = {}
+        for s_num, s_torrents in seasons.items():
+            best = score_torrents(s_torrents)
+            if best: best_seasons[s_num] = best
+            
+        best_episodes = {}
+        for key, e_torrents in episodes.items():
+            best = score_torrents(e_torrents)
+            if best: best_episodes[key] = best
+                
+        return {"seasons": best_seasons, "episodes": best_episodes}
+    except Exception as e:
+        print(f"Error searching Aither TV (TMDB {tmdb_id}): {e}")
+        return {"seasons": {}, "episodes": {}}
+
 def get_active_downloads_count():
     """Get the number of active/downloading torrents in qBittorrent."""
     try:
@@ -169,4 +265,19 @@ def check_completed_downloads(active_db_items):
         return completed_ids
     except Exception as e:
         print(f"Error checking completed downloads: {e}")
+        return []
+
+def get_all_torrent_names():
+    """Retrieve all torrent names currently mapped to qBittorrent history."""
+    try:
+        qbt_client = qbittorrentapi.Client(
+            host=QBITTORRENT_URL,
+            username=QBITTORRENT_USERNAME,
+            password=QBITTORRENT_PASSWORD
+        )
+        qbt_client.auth_log_in()
+        torrents = qbt_client.torrents_info()
+        return [t.name for t in torrents]
+    except Exception as e:
+        print(f"Error getting qbittorrent info: {e}")
         return []

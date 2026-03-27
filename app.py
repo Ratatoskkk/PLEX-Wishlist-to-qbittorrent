@@ -52,8 +52,21 @@ def index():
         except:
              last_check_str = str(system_status['last_checked'])
              
+    # Group pending items by root title
+    import re
+    pending_groups = {}
+    for p in pending:
+        # e.g., "For All Mankind (Season 1)" -> "For All Mankind"
+        match = re.search(r'^(.*?) \((?:Season|S\d+)', p['title'])
+        root = match.group(1).strip() if match else p['title']
+        
+        if root not in pending_groups:
+            pending_groups[root] = []
+        pending_groups[root].append(p)
+             
     return render_template('index.html', 
                          downloads=downloads, 
+                         pending_groups=pending_groups,
                          pending_count=len(pending),
                          last_check=last_check_str,
                          last_error=system_status['last_error'] if system_status else None)
@@ -72,6 +85,26 @@ def deny(download_id):
     if dl and dl['status'] == 'pending_approval':
         database.update_download_status(download_id, 'denied')
         flash(f"Denied download for '{dl['title']}'.", "info")
+    return redirect(url_for('index'))
+
+import urllib.parse
+@app.route('/approve_group/<title>', methods=['POST'])
+def approve_group(title):
+    decoded_title = urllib.parse.unquote(title)
+    with database.get_db() as db:
+        # Update correctly parsing SQLite string wildcard
+        db.execute("UPDATE downloads SET status = 'queued' WHERE status = 'pending_approval' AND title LIKE ?", (f"{decoded_title} (%",))
+        db.commit()
+    flash(f"Approved all seasons for '{decoded_title}'!", "success")
+    return redirect(url_for('index'))
+
+@app.route('/deny_group/<title>', methods=['POST'])
+def deny_group(title):
+    decoded_title = urllib.parse.unquote(title)
+    with database.get_db() as db:
+        db.execute("UPDATE downloads SET status = 'denied' WHERE status = 'pending_approval' AND title LIKE ?", (f"{decoded_title} (%",))
+        db.commit()
+    flash(f"Denied all seasons for '{decoded_title}'.", "info")
     return redirect(url_for('index'))
 
 @app.route('/clear', methods=['POST'])
