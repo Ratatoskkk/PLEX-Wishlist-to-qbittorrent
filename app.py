@@ -6,12 +6,14 @@ env_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(env_path)
 
 import secrets
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 import database
 import scheduler
 import downloader
 import datetime
+import urllib.parse
+import re
 
 # Validation check
 required_vars = ['PLEX_URL', 'PLEX_TOKEN', 'AITHER_API_KEY', 'QBITTORRENT_URL', 'QBITTORRENT_USERNAME', 'QBITTORRENT_PASSWORD']
@@ -23,7 +25,23 @@ if missing:
     print("[!] and filled it out completely before running run.bat.\n")
     sys.exit(1)
 
-app = Flask(__name__)
+import socket
+import sys
+
+# Prevent multiple background daemon instances from fighting over Port 5000 and spawning infinite system tray icons.
+try:
+    instance_lock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    instance_lock.bind(('127.0.0.1', 50050))
+except OSError:
+    print("\n[!] SUCCESS/INFO: PlexAither Automation is ALREADY RUNNING.")
+    print("[!] Exiting duplicate instance. Please check your System Tray for the active icon.\n")
+    sys.exit(0)
+
+import mimetypes
+mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('text/css', '.css')
+
+app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'frontend', 'dist'))
 app.secret_key = secrets.token_hex(16)
 
 # Initialize database
@@ -36,84 +54,101 @@ bg_scheduler.add_job(func=scheduler.process_queue, trigger="interval", seconds=1
 bg_scheduler.add_job(func=scheduler.monitor_downloads, trigger="interval", seconds=60, max_instances=1)
 bg_scheduler.start()
 
-@app.route('/')
-def index():
+from flask import send_from_directory, make_response
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_spa(path):
+    if path.startswith('api/'):
+        return jsonify({"error": "API route not found"}), 404
+        
+    full_path = os.path.join(app.static_folder, path)
+    if path != '' and os.path.exists(full_path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
+
+@app.after_request
+def force_mimetypes(response):
+    if request.path.endswith('.js'):
+        response.content_type = 'application/javascript'
+    elif request.path.endswith('.css'):
+        response.content_type = 'text/css'
+    elif request.path == '/' or request.path.endswith('.html'):
+        response.content_type = 'text/html'
+        
+    # Bruteforce cache reset to clear corrupted browser MIME types from 304 Not Modified
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
+
+@app.route('/api/state')
+def get_state():
     downloads = database.get_all_downloads()
     system_status = database.get_system_status()
     pending = [d for d in downloads if d['status'] == 'pending_approval']
     
     last_check_str = "Never"
     if system_status and system_status['last_checked']:
-        # Format the datetime object correctly string from DB
         try:
-             # Depending on sqlite formatting, it might be string
              dt = datetime.datetime.fromisoformat(system_status['last_checked'])
              last_check_str = dt.strftime("%Y-%m-%d %H:%M:%S")
         except:
              last_check_str = str(system_status['last_checked'])
              
-    # Group pending items by root title
-    import re
     pending_groups = {}
     for p in pending:
-        # e.g., "For All Mankind (Season 1)" -> "For All Mankind"
         match = re.search(r'^(.*?) \((?:Season|S\d+)', p['title'])
         root = match.group(1).strip() if match else p['title']
-        
         if root not in pending_groups:
-            pending_groups[root] = []
-        pending_groups[root].append(p)
+             pending_groups[root] = []
+        pending_groups[root].append(dict(p))
              
-    return render_template('index.html', 
-                         downloads=downloads, 
-                         pending_groups=pending_groups,
-                         pending_count=len(pending),
-                         last_check=last_check_str,
-                         last_error=system_status['last_error'] if system_status else None)
+    return jsonify({
+        'downloads': [dict(d) for d in downloads],
+        'pending_groups': pending_groups,
+        'pending_count': len(pending),
+        'last_check': last_check_str,
+        'last_error': system_status['last_error'] if system_status else None
+    })
 
-@app.route('/approve/<int:download_id>', methods=['POST'])
+@app.route('/api/approve/<int:download_id>', methods=['POST'])
 def approve(download_id):
     dl = database.get_download(download_id)
     if dl and dl['status'] == 'pending_approval':
         database.update_download_status(download_id, 'queued')
-        flash(f"Approved! '{dl['title']}' has been added to the download queue.", "success")
-    return redirect(url_for('index'))
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "Download not found or not pending"}), 400
 
-@app.route('/deny/<int:download_id>', methods=['POST'])
+@app.route('/api/deny/<int:download_id>', methods=['POST'])
 def deny(download_id):
     dl = database.get_download(download_id)
     if dl and dl['status'] == 'pending_approval':
         database.update_download_status(download_id, 'denied')
-        flash(f"Denied download for '{dl['title']}'.", "info")
-    return redirect(url_for('index'))
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "Download not found or not pending"}), 400
 
-import urllib.parse
-@app.route('/approve_group/<title>', methods=['POST'])
+@app.route('/api/approve_group/<path:title>', methods=['POST'])
 def approve_group(title):
     decoded_title = urllib.parse.unquote(title)
     with database.get_db() as db:
-        # Update correctly parsing SQLite string wildcard
         db.execute("UPDATE downloads SET status = 'queued' WHERE status = 'pending_approval' AND title LIKE ?", (f"{decoded_title} (%",))
         db.commit()
-    flash(f"Approved all seasons for '{decoded_title}'!", "success")
-    return redirect(url_for('index'))
+    return jsonify({"success": True})
 
-@app.route('/deny_group/<title>', methods=['POST'])
+@app.route('/api/deny_group/<path:title>', methods=['POST'])
 def deny_group(title):
     decoded_title = urllib.parse.unquote(title)
     with database.get_db() as db:
         db.execute("UPDATE downloads SET status = 'denied' WHERE status = 'pending_approval' AND title LIKE ?", (f"{decoded_title} (%",))
         db.commit()
-    flash(f"Denied all seasons for '{decoded_title}'.", "info")
-    return redirect(url_for('index'))
+    return jsonify({"success": True})
 
-@app.route('/clear', methods=['POST'])
+@app.route('/api/clear', methods=['POST'])
 def clear_history():
     with database.get_db() as db:
         db.execute("DELETE FROM downloads WHERE status NOT IN ('pending_approval', 'downloading', 'queued')")
         db.commit()
-    flash("Cleared completed/denied/error history.", "success")
-    return redirect(url_for('index'))
+    return jsonify({"success": True})
 
 def create_image():
     from PIL import Image, ImageDraw
@@ -144,9 +179,9 @@ if __name__ == '__main__':
         sys.stderr = open(os.devnull, 'w')
 
     print("Serving PlexTracker on http://0.0.0.0:5000. Check System Tray.")
-    
-    # Memory Optimization: Drop heavy multithreading (4 to 2) since this is a localized CLI tool
-    server_thread = threading.Thread(target=serve, args=(app,), kwargs={'host': '0.0.0.0', 'port': 5000, 'threads': 2}, daemon=True)
+    import logging
+    logging.getLogger('waitress').setLevel(logging.ERROR) # Mute innocuous queue warnings
+    server_thread = threading.Thread(target=serve, args=(app,), kwargs={'host': '0.0.0.0', 'port': 5000, 'threads': 16}, daemon=True)
     server_thread.start()
     
     icon = setup_tray()

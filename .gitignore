@@ -7,3 +7,11 @@ venv/
 .venv/
 .idea/
 .vscode/
+
+# Frontend build output
+frontend/dist/
+frontend/.svelte-kit/
+frontend/node_modules/
+
+# Bundled Node.js binary
+.node/
