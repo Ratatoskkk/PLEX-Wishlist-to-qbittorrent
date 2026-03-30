@@ -17,6 +17,12 @@ export interface Download {
   eta_seconds: number;
 }
 
+export interface ProgressUpdate {
+  progress: number;
+  eta_seconds: number;
+  speed_mbps: number;
+}
+
 export interface AppState {
   downloads: Download[];
   pending_groups: Record<string, Download[]>;

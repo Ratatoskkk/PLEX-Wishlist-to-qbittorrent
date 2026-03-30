@@ -6,7 +6,7 @@ env_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(env_path)
 
 import secrets
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from apscheduler.schedulers.background import BackgroundScheduler
 import database
 import scheduler
@@ -110,6 +110,62 @@ def get_state():
         'last_check': last_check_str,
         'last_error': system_status['last_error'] if system_status else None
     })
+
+@app.route('/api/stream')
+def stream_progress():
+    """SSE endpoint — pushes real-time qBittorrent progress every 1.5s for active downloads."""
+    import json
+    import time
+
+    def generate():
+        try:
+            qbt = downloader.get_qbt_client()
+        except Exception:
+            yield "data: {}\n\n"
+            return
+
+        while True:
+            try:
+                active_db = [d for d in database.get_all_downloads() if d['status'] == 'downloading']
+                if not active_db:
+                    yield "data: {}\n\n"
+                    time.sleep(1.5)
+                    continue
+
+                torrents = qbt.torrents_info()
+                updates = {}
+
+                for item in active_db:
+                    plex_words = set(downloader.normalize_title(item['title']))
+                    for t in torrents:
+                        t_words = set(downloader.normalize_title(t.name))
+                        if plex_words.issubset(t_words):
+                            eta = int(t.eta) if t.eta < 8640000 else -1
+                            speed_mbps = round(t.dlspeed / 1_000_000, 2)
+                            updates[str(item['id'])] = {
+                                'progress': round(float(t.progress), 4),
+                                'eta_seconds': eta,
+                                'speed_mbps': speed_mbps,
+                            }
+                            break
+
+                yield f"data: {json.dumps(updates)}\n\n"
+            except GeneratorExit:
+                break
+            except Exception:
+                yield "data: {}\n\n"
+
+            time.sleep(1.5)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+        }
+    )
+
 
 @app.route('/api/approve/<int:download_id>', methods=['POST'])
 def approve(download_id):
