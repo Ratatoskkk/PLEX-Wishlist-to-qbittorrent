@@ -27,6 +27,31 @@ def get_plex_server() -> Optional[PlexServer]:
         print(f"Warning: Could not connect to local Plex Server at {PLEX_URL}. (Error: {e})")
     return None
 
+def trigger_plex_refresh(title: str) -> None:
+    """Trigger a Plex library refresh after a download completes.
+    
+    Determines whether the completed item is a movie or TV show from
+    the title format, then refreshes only the relevant library section.
+    """
+    plex = get_plex_server()
+    if not plex:
+        print(f"Plex refresh skipped — server unavailable.")
+        return
+
+    # TV titles are formatted as 'Title (Season X)' or 'Title (S01E01)'
+    is_tv = bool(re.search(r'\((?:Season \d+|S\d+E\d+)\)', title, re.IGNORECASE))
+    target_types = {'show', 'episode'} if is_tv else {'movie'}
+
+    try:
+        refreshed = []
+        for section in plex.library.sections():
+            if section.type in target_types:
+                section.update()  # plexapi: triggers partial scan/refresh
+                refreshed.append(section.title)
+        print(f"Plex library refresh triggered for sections: {', '.join(refreshed) or 'none'}")
+    except Exception as e:
+        print(f"Warning: Plex refresh failed for '{title}': {e}")
+
 def extract_tmdb_id(item) -> Optional[str]:
     """Early exit string extraction."""
     for guid in getattr(item, 'guids', []):
@@ -294,7 +319,10 @@ def monitor_downloads():
             if data['status'] == 'completed':
                 database.update_download_status(db_id, 'completed')
                 database.update_download_progress(db_id, 1.0, 0)
-                print(f"Marked download {db_id} as completed in dashboard!")
+                completed_item = next((i for i in active_items if i['id'] == db_id), None)
+                completed_title = completed_item['title'] if completed_item else str(db_id)
+                print(f"Marked download {db_id} ('{completed_title}') as completed!")
+                trigger_plex_refresh(completed_title)
             else:
                 database.update_download_progress(db_id, data['progress'], data['eta_seconds'])
             
