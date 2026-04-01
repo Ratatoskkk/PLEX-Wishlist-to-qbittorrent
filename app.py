@@ -54,7 +54,7 @@ bg_scheduler.add_job(func=scheduler.process_queue, trigger="interval", seconds=1
 bg_scheduler.add_job(func=scheduler.monitor_downloads, trigger="interval", seconds=60, max_instances=1)
 bg_scheduler.start()
 
-from flask import send_from_directory, make_response
+from flask import send_from_directory
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -138,10 +138,11 @@ def stream_progress():
                 torrents = qbt.torrents_info()
                 updates = {}
 
+                torrent_words = [(t, set(downloader.normalize_title(t.name))) for t in torrents]
+
                 for item in active_db:
                     plex_words = set(downloader.normalize_title(item['title']))
-                    for t in torrents:
-                        t_words = set(downloader.normalize_title(t.name))
+                    for t, t_words in torrent_words:
                         if plex_words.issubset(t_words):
                             eta = int(t.eta) if t.eta < 8640000 else -1
                             speed_mbps = round(t.dlspeed / 1_000_000, 2)

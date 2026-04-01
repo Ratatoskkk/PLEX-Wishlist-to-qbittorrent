@@ -215,7 +215,7 @@ def get_active_downloads_count(qbt_client: qbittorrentapi.Client) -> int:
         return len(torrents)
     except Exception as e:
         print(f"Error getting active downloads count: {e}")
-        return 0
+        return -1
 
 def send_to_qbittorrent(qbt_client: qbittorrentapi.Client, download_link: str, save_path: str) -> bool:
     """Send a download URL to qBittorrent."""
@@ -236,7 +236,6 @@ def get_active_downloads_status(qbt_client: qbittorrentapi.Client, active_db_ite
     status_updates = {}
     try:
         torrents = qbt_client.torrents_info()
-        
         # Precompute torrent words to avoid redundant string parsing (O(N*M) -> O(N+M))
         precomputed_torrents = [(t, set(normalize_title(t.name))) for t in torrents]
 
