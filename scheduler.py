@@ -18,6 +18,11 @@ PLEX_TOKEN = os.getenv('PLEX_TOKEN')
 DOWNLOAD_DIR_1 = os.getenv('DOWNLOAD_DIR_1', 'D:\\Torrents')
 DOWNLOAD_DIR_2 = os.getenv('DOWNLOAD_DIR_2', 'E:\\Torrent')
 
+# Pre-compiled regex patterns for performance
+RE_TV_TITLE = re.compile(r'\((?:Season \d+|S\d+E\d+)\)', re.IGNORECASE)
+RE_S_NUM = re.compile(r'\bS(\d{1,2})\b', re.IGNORECASE)
+RE_E_NUM = re.compile(r'\bE(\d{1,2})\b', re.IGNORECASE)
+
 def get_plex_server() -> Optional[PlexServer]:
     """Guard clause pattern for optional Plex Server"""
     try:
@@ -39,7 +44,7 @@ def trigger_plex_refresh(title: str) -> None:
         return
 
     # TV titles are formatted as 'Title (Season X)' or 'Title (S01E01)'
-    is_tv = bool(re.search(r'\((?:Season \d+|S\d+E\d+)\)', title, re.IGNORECASE))
+    is_tv = bool(RE_TV_TITLE.search(title))
     target_types = {'show', 'episode'} if is_tv else {'movie'}
 
     try:
@@ -130,6 +135,11 @@ def get_watched_status(plex: Optional[PlexServer], title: str) -> Tuple[List[int
 
 def is_already_downloaded(title: str, existing_qbt_names: List[str], s_num: int, e_num: Optional[int] = None) -> bool:
     normalized_title_words = set(downloader.normalize_title(title))
+
+    re_episode = None
+    if e_num:
+        re_episode = re.compile(rf'\bS{s_num:02d}[ .]?E{e_num:02d}\b', re.IGNORECASE)
+
     for t_name in existing_qbt_names:
         t_words = set(downloader.normalize_title(t_name))
         
@@ -138,11 +148,11 @@ def is_already_downloaded(title: str, existing_qbt_names: List[str], s_num: int,
             continue
             
         if e_num:
-            if re.search(rf'\bS{s_num:02d}[ .]?E{e_num:02d}\b', t_name, re.IGNORECASE):
+            if re_episode.search(t_name):
                 return True
         else:
-            match_s = re.search(r'\bS(\d{1,2})\b', t_name, re.IGNORECASE)
-            has_episode = re.search(r'\bE(\d{1,2})\b', t_name, re.IGNORECASE)
+            match_s = RE_S_NUM.search(t_name)
+            has_episode = RE_E_NUM.search(t_name)
             if match_s and not has_episode and int(match_s.group(1)) == s_num:
                 return True
     return False
