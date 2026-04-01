@@ -1,3 +1,10 @@
+import sys
+from unittest.mock import MagicMock
+sys.modules['plexapi'] = MagicMock()
+sys.modules['plexapi.myplex'] = MagicMock()
+sys.modules['plexapi.server'] = MagicMock()
+sys.modules['qbittorrentapi'] = MagicMock()
+
 import downloader
 from scheduler import is_already_downloaded
 
