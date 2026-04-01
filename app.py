@@ -1,5 +1,10 @@
 import os
 import sys
+
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
+
 from dotenv import load_dotenv
 
 env_path = os.path.join(os.path.dirname(__file__), '.env')
