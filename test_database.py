@@ -10,15 +10,20 @@ class TestDatabase(unittest.TestCase):
     def setUp(self):
         # Create a temporary file for the database
         self.db_fd, self.db_path = tempfile.mkstemp()
+        # Close the file descriptor so sqlite can use it
+        os.close(self.db_fd)
         database.DB_PATH = self.db_path
 
         # Initialize the database schema
         database.init_db()
 
     def tearDown(self):
-        # Close the file descriptor and remove the temporary file
-        os.close(self.db_fd)
-        os.unlink(self.db_path)
+        # Attempt to unlink the temporary file, but don't fail if it's still locked (Windows issue)
+        try:
+            if os.path.exists(self.db_path):
+                os.unlink(self.db_path)
+        except PermissionError:
+            pass
 
     def test_get_db(self):
         conn = database.get_db()
@@ -30,22 +35,22 @@ class TestDatabase(unittest.TestCase):
     def test_init_db(self):
         # init_db is called in setUp, let's verify tables exist
         conn = database.get_db()
+        try:
+            # Check downloads table
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='downloads'")
+            self.assertIsNotNone(cursor.fetchone())
 
-        # Check downloads table
-        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='downloads'")
-        self.assertIsNotNone(cursor.fetchone())
+            # Check system_status table
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_status'")
+            self.assertIsNotNone(cursor.fetchone())
 
-        # Check system_status table
-        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='system_status'")
-        self.assertIsNotNone(cursor.fetchone())
-
-        # Check initial system_status row
-        cursor = conn.execute("SELECT * FROM system_status WHERE id=1")
-        row = cursor.fetchone()
-        self.assertIsNotNone(row)
-        self.assertIsNone(row['last_checked'])
-
-        conn.close()
+            # Check initial system_status row
+            cursor = conn.execute("SELECT * FROM system_status WHERE id=1")
+            row = cursor.fetchone()
+            self.assertIsNotNone(row)
+            self.assertIsNone(row['last_checked'])
+        finally:
+            conn.close()
 
     def test_record_download(self):
         params = {
@@ -63,18 +68,20 @@ class TestDatabase(unittest.TestCase):
 
         # Verify inserted row
         conn = database.get_db()
-        row = conn.execute("SELECT * FROM downloads WHERE id=?", (download_id,)).fetchone()
-        self.assertIsNotNone(row)
-        self.assertEqual(row['title'], 'Test Movie')
-        self.assertEqual(row['tmdb_id'], '12345')
-        self.assertEqual(row['file_size_bytes'], 1000.0)
-        self.assertEqual(row['status'], 'queued')
-        self.assertEqual(row['aither_torrent_id'], '98765')
-        self.assertEqual(row['download_link'], 'http://example.com/download')
-        self.assertEqual(row['resolution'], '1080p')
-        self.assertEqual(row['progress'], 0.0)
-        self.assertEqual(row['eta_seconds'], -1)
-        conn.close()
+        try:
+            row = conn.execute("SELECT * FROM downloads WHERE id=?", (download_id,)).fetchone()
+            self.assertIsNotNone(row)
+            self.assertEqual(row['title'], 'Test Movie')
+            self.assertEqual(row['tmdb_id'], '12345')
+            self.assertEqual(row['file_size_bytes'], 1000.0)
+            self.assertEqual(row['status'], 'queued')
+            self.assertEqual(row['aither_torrent_id'], '98765')
+            self.assertEqual(row['download_link'], 'http://example.com/download')
+            self.assertEqual(row['resolution'], '1080p')
+            self.assertEqual(row['progress'], 0.0)
+            self.assertEqual(row['eta_seconds'], -1)
+        finally:
+            conn.close()
 
     def test_update_download_status(self):
         params = {
@@ -91,9 +98,11 @@ class TestDatabase(unittest.TestCase):
         database.update_download_status(download_id, 'downloading')
 
         conn = database.get_db()
-        row = conn.execute("SELECT status FROM downloads WHERE id=?", (download_id,)).fetchone()
-        self.assertEqual(row['status'], 'downloading')
-        conn.close()
+        try:
+            row = conn.execute("SELECT status FROM downloads WHERE id=?", (download_id,)).fetchone()
+            self.assertEqual(row['status'], 'downloading')
+        finally:
+            conn.close()
 
     def test_update_download_progress(self):
         params = {
@@ -110,10 +119,12 @@ class TestDatabase(unittest.TestCase):
         database.update_download_progress(download_id, 50.5, 3600)
 
         conn = database.get_db()
-        row = conn.execute("SELECT progress, eta_seconds FROM downloads WHERE id=?", (download_id,)).fetchone()
-        self.assertEqual(row['progress'], 50.5)
-        self.assertEqual(row['eta_seconds'], 3600)
-        conn.close()
+        try:
+            row = conn.execute("SELECT progress, eta_seconds FROM downloads WHERE id=?", (download_id,)).fetchone()
+            self.assertEqual(row['progress'], 50.5)
+            self.assertEqual(row['eta_seconds'], 3600)
+        finally:
+            conn.close()
 
     def test_get_all_downloads(self):
         params1 = {
@@ -170,8 +181,6 @@ class TestDatabase(unittest.TestCase):
         }
 
         database.record_download(params1)
-        # Add a tiny delay to ensure timestamps might be different,
-        # but auto-increment id and sequential inserts usually keep order even with same timestamp
         database.record_download(params2)
 
         next_item = database.get_next_queued_item()
