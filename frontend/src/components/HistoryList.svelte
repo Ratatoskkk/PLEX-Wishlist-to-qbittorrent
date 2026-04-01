@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { Download, ProgressUpdate } from '../types';
+  import { formatTime } from '../lib/utils';
 
   interface Props {
     downloads: Download[];
@@ -73,16 +74,6 @@
   function getSpeed(dl: Download): number | null {
     const s = getLive(dl.id)?.speed_mbps;
     return s !== undefined ? s : null;
-  }
-
-  function formatTime(secs: number): string {
-    if (secs < 0 || secs >= 8640000) return '∞';
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
   }
 
   // No decimals — rounded values only

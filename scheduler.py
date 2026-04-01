@@ -1,7 +1,6 @@
 import os
 import shutil
 import re
-import math
 from typing import List, Set, Tuple, Dict, Any, Optional
 from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
@@ -133,20 +132,12 @@ def get_watched_status(plex: Optional[PlexServer], title: str) -> Tuple[List[int
         
     return watched_seasons, watched_episodes
 
-def is_already_downloaded(title: str, existing_qbt_names: List[str], s_num: int, e_num: Optional[int] = None) -> bool:
-    normalized_title_words = set(downloader.normalize_title(title))
-
+def is_already_downloaded(relevant_qbt_names: List[str], s_num: int, e_num: Optional[int] = None) -> bool:
     re_episode = None
     if e_num:
         re_episode = re.compile(rf'\bS{s_num:02d}[ .]?E{e_num:02d}\b', re.IGNORECASE)
 
-    for t_name in existing_qbt_names:
-        t_words = set(downloader.normalize_title(t_name))
-        
-        # Check title overlap
-        if not (normalized_title_words.issubset(t_words) or (title.lower() in t_name.lower())):
-            continue
-            
+    for t_name in relevant_qbt_names:
         if e_num:
             if re_episode.search(t_name):
                 return True
@@ -164,12 +155,21 @@ def process_show(item, account: MyPlexAccount, plex: Optional[PlexServer], qbt_c
     single_eps = available_data.get('episodes', {})
     existing_qbt_names = downloader.get_all_torrent_names(qbt_client)
     
+    # Pre-filter qBittorrent names that match the show title
+    title_lower = title.lower()
+    normalized_title_words = set(downloader.normalize_title(title))
+    relevant_qbt_names = []
+    for t_name in existing_qbt_names:
+        t_words = set(downloader.normalize_title(t_name))
+        if normalized_title_words.issubset(t_words) or (title_lower in t_name.lower()):
+            relevant_qbt_names.append(t_name)
+
     items_to_queue = []
     distinct_seasons_queued = set()
     
     for s_num, best_t in season_packs.items():
         if s_num == 0 or s_num in watched_seasons: continue
-        if is_already_downloaded(title, existing_qbt_names, s_num): continue
+        if is_already_downloaded(relevant_qbt_names, s_num): continue
         if database.is_already_recorded(best_t.get('id', '')): continue
             
         items_to_queue.append((best_t, f"{title} (Season {s_num})"))
@@ -178,7 +178,7 @@ def process_show(item, account: MyPlexAccount, plex: Optional[PlexServer], qbt_c
     for (s_num, e_num), best_t in single_eps.items():
         if s_num == 0 or (s_num, e_num) in watched_episodes or s_num in watched_seasons or s_num in season_packs: 
             continue
-        if is_already_downloaded(title, existing_qbt_names, s_num, e_num): 
+        if is_already_downloaded(relevant_qbt_names, s_num, e_num):
             continue
         if database.is_already_recorded(best_t.get('id', '')): 
             continue
@@ -290,6 +290,10 @@ def process_queue():
     try:
         qbt_client = downloader.get_qbt_client()
         active_count = downloader.get_active_downloads_count(qbt_client)
+        if active_count < 0:
+            print("Error retrieving active downloads count. Waiting.")
+            return
+
         if active_count >= 2:
             print(f"Queue full ({active_count} active). Waiting.")
             return
