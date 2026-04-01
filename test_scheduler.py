@@ -16,31 +16,35 @@ sys.modules['apscheduler.schedulers.background'] = MagicMock()
 import downloader
 from scheduler import is_already_downloaded, extract_tmdb_id
 
-def mock_normalize_title(title: str):
-    return title.lower().split()
-downloader.normalize_title = mock_normalize_title
-
 class TestScheduler(unittest.TestCase):
     def test_is_already_downloaded(self):
-        existing_qbt_names = [
+        # Temporarily mock normalize_title to match test logic without affecting other tests globally
+        original_normalize_title = downloader.normalize_title
+        def mock_normalize_title(title: str):
+            return title.lower().split()
+        downloader.normalize_title = mock_normalize_title
+
+        # In reality, scheduler.py filters these names first before calling is_already_downloaded.
+        best_show_names = [
             "The Best Show S01E01 1080p",
             "The Best Show S01E02 1080p",
-            "Another Show S02E05 720p",
             "The Best Show S02 1080p"
         ]
 
-        # Filter list for "The Best Show"
-        the_best_show_names = [name for name in existing_qbt_names if "The Best Show" in name]
-        # Filter list for "Another Show"
-        another_show_names = [name for name in existing_qbt_names if "Another Show" in name]
+        another_show_names = [
+            "Another Show S02E05 720p"
+        ]
 
-        self.assertTrue(is_already_downloaded(the_best_show_names, 1, 1))
-        self.assertFalse(is_already_downloaded(the_best_show_names, 1, 3))
-        self.assertTrue(is_already_downloaded(another_show_names, 2, 5))
-        self.assertFalse(is_already_downloaded(another_show_names, 2, 6))
+        try:
+            self.assertTrue(is_already_downloaded(best_show_names, 1, 1))
+            self.assertFalse(is_already_downloaded(best_show_names, 1, 3))
+            self.assertTrue(is_already_downloaded(another_show_names, 2, 5))
+            self.assertFalse(is_already_downloaded(another_show_names, 2, 6))
 
-        self.assertTrue(is_already_downloaded(the_best_show_names, 2))
-        self.assertFalse(is_already_downloaded(the_best_show_names, 3))
+            self.assertTrue(is_already_downloaded(best_show_names, 2))
+            self.assertFalse(is_already_downloaded(best_show_names, 3))
+        finally:
+            downloader.normalize_title = original_normalize_title
 
     def test_extract_tmdb_id_success(self):
         mock_item = MagicMock()

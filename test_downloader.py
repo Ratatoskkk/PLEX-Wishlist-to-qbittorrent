@@ -2,7 +2,11 @@ import sys
 import unittest
 from unittest.mock import MagicMock
 
-# Stub external dependencies
+# We should NOT globally stub modules like this when using full test runners,
+# because it poisons the module cache for other test modules like test_scheduler.py
+# that actually need the real 'requests' module.
+
+# Stub external dependencies for this specific test module
 sys.modules['requests'] = MagicMock()
 sys.modules['qbittorrentapi'] = MagicMock()
 sys.modules['dotenv'] = MagicMock()
@@ -252,9 +256,33 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(result_empty_attrs, expected_fallback)
 
     def test_normalize_title(self):
-        self.assertEqual(downloader.normalize_title("Show Name Season 1"), ["show", "name", "s01"])
-        self.assertEqual(downloader.normalize_title("Show Name S01"), ["show", "name", "s01"])
-        self.assertEqual(downloader.normalize_title("Show.Name.S01E01.1080p"), ["show", "name", "s01e01", "1080p"])
+        # Arrange
+        test_cases = [
+            # (input_title, expected_output)
+            ("The Matrix", ["the", "matrix"]),  # Basic title
+            ("The Matrix Reloaded 2003", ["the", "matrix", "reloaded", "2003"]),  # Mixed case and numbers
+            ("Game of Thrones Season 1", ["game", "of", "thrones", "s01"]),  # Season X conversion
+            ("Game of Thrones Season 12", ["game", "of", "thrones", "s12"]),  # 2-digit season
+            ("Game of Thrones (Season 1)", ["game", "of", "thrones", "s01"]),  # (Season X) conversion
+            ("The.Last.of.Us.S01E01", ["the", "last", "of", "us", "s01e01"]),  # Dots and S01E01
+            ("Breaking Bad: The Movie", ["breaking", "bad", "the", "movie"]),  # Special characters (colon)
+            ("Spider-Man: Across the Spider-Verse", ["spider", "man", "across", "the", "spider", "verse"]),  # Hyphens
+            ("What If...?", ["what", "if"]),  # Ellipsis and question mark
+            ("   Spaces   Everywhere   ", ["spaces", "everywhere"]),  # Extraneous spaces
+            ("12 Monkeys", ["12", "monkeys"]),  # Starts with number
+            ("", []),  # Empty string
+            ("!!!@@@###", []),  # Only special characters
+            ("sEaSoN 5", ["s05"]), # Case insensitive Season match
+            ("Season 05", ["s05"]) # Zero-padded season
+        ]
+
+        for input_title, expected_output in test_cases:
+            with self.subTest(input_title=input_title):
+                # Act
+                result = downloader.normalize_title(input_title)
+
+                # Assert
+                self.assertEqual(result, expected_output)
 
 class TestIsFullDisc(unittest.TestCase):
     def test_is_full_disc_true_positives_type(self):
