@@ -75,7 +75,6 @@ def require_auth():
     if not auth or not check_auth(auth.username, auth.password):
         return authenticate()
 
-
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_spa(path):
