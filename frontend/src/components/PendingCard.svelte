@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Download } from '../types';
+  import { formatSize } from '$lib/utils';
 
   interface Props {
     title: string;
@@ -7,14 +8,6 @@
     onAction: () => void;
   }
   let { title, items, onAction } = $props<Props>();
-
-  function formatSize(bytes: number) {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
 
   async function groupAction(path: string) {
     await fetch(path + '/' + encodeURIComponent(title), { method: 'POST' });
