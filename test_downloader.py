@@ -107,6 +107,113 @@ class TestDownloader(unittest.TestCase):
         # Check skipped non-match
         # Should not throw error, should just ignore id 7
 
+    def test_filter_best_torrent_empty(self):
+        # Act
+        result = downloader.filter_best_torrent([])
+
+        # Assert
+        self.assertIsNone(result)
+
+    def test_filter_best_torrent_no_valid(self):
+        # Arrange
+        torrents = [
+            {'id': 1, 'attributes': {'resolution': '720p', 'name': 'movie 720p'}},
+            {'id': 2, 'attributes': {'type': 'full disc', 'name': 'movie bd50'}}
+        ]
+
+        # Act
+        result = downloader.filter_best_torrent(torrents)
+
+        # Assert
+        self.assertIsNone(result)
+
+    def test_filter_best_torrent_priorities(self):
+        # Arrange
+        torrents = [
+            {'id': 1, 'attributes': {'resolution': '1080p', 'name': 'movie 1080p'}},
+            {'id': 2, 'attributes': {'resolution': '1080p', 'name': 'movie 1080p remux'}},
+            {'id': 3, 'attributes': {'resolution': '2160p', 'name': 'movie 4k'}},
+            {'id': 4, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr'}},
+            {'id': 5, 'attributes': {'resolution': '2160p', 'name': 'movie 4k remux'}},
+            {'id': 6, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr remux'}},
+        ]
+
+        # Act
+        result = downloader.filter_best_torrent(torrents)
+
+        # Assert
+        self.assertEqual(result.get('id'), 6)
+
+        # Test finding second best when first best is not there
+        result2 = downloader.filter_best_torrent(torrents[:5])
+        self.assertEqual(result2.get('id'), 5)
+
+        # Test finding third best
+        result3 = downloader.filter_best_torrent(torrents[:4])
+        self.assertEqual(result3.get('id'), 4)
+
+        # Test finding fourth best
+        result4 = downloader.filter_best_torrent(torrents[:3])
+        self.assertEqual(result4.get('id'), 3)
+
+        # Test finding fifth best
+        result5 = downloader.filter_best_torrent(torrents[:2])
+        self.assertEqual(result5.get('id'), 2)
+
+        # Test finding sixth best
+        result6 = downloader.filter_best_torrent(torrents[:1])
+        self.assertEqual(result6.get('id'), 1)
+
+    def test_filter_best_torrent_size_tiebreaker(self):
+        # Arrange
+        torrents = [
+            {'id': 1, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr remux', 'size': 1000}},
+            {'id': 2, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr remux', 'size': 2000}},
+            {'id': 3, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr remux', 'size': 1500}},
+        ]
+
+        # Act
+        result = downloader.filter_best_torrent(torrents)
+
+        # Assert
+        self.assertEqual(result.get('id'), 2)
+
+    def test_filter_best_torrent_hdr_detection(self):
+        # Arrange
+        torrents_hdr_in_name = [
+            {'id': 1, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr remux'}}
+        ]
+        torrents_hdr_in_media_info = [
+            {'id': 2, 'attributes': {'resolution': '2160p', 'name': 'movie 4k remux', 'media_info': 'hdr10'}}
+        ]
+        torrents_hdr_as_bool = [
+            {'id': 3, 'attributes': {'resolution': '2160p', 'name': 'movie 4k remux', 'hdr': True}}
+        ]
+        torrents_no_hdr = [
+            {'id': 4, 'attributes': {'resolution': '2160p', 'name': 'movie 4k remux'}}
+        ]
+
+        # Act & Assert
+        self.assertEqual(downloader.filter_best_torrent(torrents_hdr_in_name + torrents_no_hdr).get('id'), 1)
+        self.assertEqual(downloader.filter_best_torrent(torrents_hdr_in_media_info + torrents_no_hdr).get('id'), 2)
+        self.assertEqual(downloader.filter_best_torrent(torrents_hdr_as_bool + torrents_no_hdr).get('id'), 3)
+
+    def test_filter_best_torrent_remux_detection(self):
+        # Arrange
+        torrents_remux_in_name = [
+            {'id': 1, 'attributes': {'resolution': '2160p', 'name': 'movie 4k remux hdr'}}
+        ]
+        torrents_remux_in_type = [
+            {'id': 2, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr', 'type': 'remux'}}
+        ]
+        torrents_no_remux = [
+            {'id': 3, 'attributes': {'resolution': '2160p', 'name': 'movie 4k hdr'}}
+        ]
+
+        # Act & Assert
+        self.assertEqual(downloader.filter_best_torrent(torrents_remux_in_name + torrents_no_remux).get('id'), 1)
+        self.assertEqual(downloader.filter_best_torrent(torrents_remux_in_type + torrents_no_remux).get('id'), 2)
+
 
 if __name__ == '__main__':
     unittest.main()
