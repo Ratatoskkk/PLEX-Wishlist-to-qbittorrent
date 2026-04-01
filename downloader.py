@@ -15,6 +15,13 @@ QBITTORRENT_PASSWORD = os.getenv('QBITTORRENT_PASSWORD')
 
 AITHER_URL = "https://aither.cc/api/torrents/filter"
 
+# Pre-compiled regex patterns for performance
+RE_S_NUM = re.compile(r'\bS(\d{1,2})\b', re.IGNORECASE)
+RE_E_NUM = re.compile(r'\bE(\d{1,2})\b', re.IGNORECASE)
+RE_SE_NUM = re.compile(r'\bS(\d{1,2})[ .]?E(\d{1,2})\b', re.IGNORECASE)
+RE_SEASON = re.compile(r'\(?Season\s+(\d+)\)?', re.IGNORECASE)
+RE_WORDS = re.compile(r'\w+')
+
 def get_qbt_client() -> qbittorrentapi.Client:
     """Dependency Injection for Qbittorrent client"""
     qbt_client = qbittorrentapi.Client(
@@ -152,9 +159,9 @@ def parse_tv_torrents(torrents: List[Dict[str, Any]]) -> Tuple[Dict[int, List[Di
         if is_full_disc(str(attrs.get('type', '')), t_name):
             continue
         
-        match_s = re.search(r'\bS(\d{1,2})\b', t_name, re.IGNORECASE)
-        match_e = re.search(r'\bE(\d{1,2})\b', t_name, re.IGNORECASE)
-        match_se = re.search(r'\bS(\d{1,2})[ .]?E(\d{1,2})\b', t_name, re.IGNORECASE)
+        match_s = RE_S_NUM.search(t_name)
+        match_e = RE_E_NUM.search(t_name)
+        match_se = RE_SE_NUM.search(t_name)
         
         if match_se:
             s_num, e_num = int(match_se.group(1)), int(match_se.group(2))
@@ -221,8 +228,8 @@ def send_to_qbittorrent(qbt_client: qbittorrentapi.Client, download_link: str, s
 
 def normalize_title(title: str) -> List[str]:
     # Convert 'Season X' to 'S0X' for scene torrent matching
-    title = re.sub(r'\(?Season\s+(\d+)\)?', lambda m: f"S{int(m.group(1)):02d}", title, flags=re.IGNORECASE)
-    return [w.lower() for w in re.findall(r'\w+', title)]
+    title = RE_SEASON.sub(lambda m: f"S{int(m.group(1)):02d}", title)
+    return [w.lower() for w in RE_WORDS.findall(title)]
 
 def get_active_downloads_status(qbt_client: qbittorrentapi.Client, active_db_items: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
     """Check active DB items against qBittorrent and return their progress, ETA, and completed status."""
