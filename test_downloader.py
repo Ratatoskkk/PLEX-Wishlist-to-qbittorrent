@@ -235,6 +235,29 @@ class TestDownloader(unittest.TestCase):
 
         self.assertIsNone(downloader.score_torrents([]))
 
+    def test_score_torrents_empty_list(self):
+        # Act
+        result = downloader.score_torrents([])
+
+        # Assert
+        self.assertIsNone(result)
+
+    def test_score_torrents_poorly_formatted(self):
+        # Act
+        result_empty_dict = downloader.score_torrents([{}])
+        result_empty_attrs = downloader.score_torrents([{'attributes': {}}])
+
+        # Assert
+        expected_fallback = {
+            'id': None,
+            'name': '',
+            'size': 0,
+            'download_link': None,
+            'resolution': 'Unknown'
+        }
+        self.assertEqual(result_empty_dict, expected_fallback)
+        self.assertEqual(result_empty_attrs, expected_fallback)
+
     def test_normalize_title(self):
         self.assertEqual(downloader.normalize_title("Show Name Season 1"), ["show", "name", "s01"])
         self.assertEqual(downloader.normalize_title("Show Name S01"), ["show", "name", "s01"])
