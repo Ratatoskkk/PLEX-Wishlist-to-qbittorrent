@@ -237,12 +237,14 @@ def get_active_downloads_status(qbt_client: qbittorrentapi.Client, active_db_ite
     try:
         torrents = qbt_client.torrents_info()
         
+        # Precompute torrent words to avoid redundant string parsing (O(N*M) -> O(N+M))
+        precomputed_torrents = [(t, set(normalize_title(t.name))) for t in torrents]
+
         for item in active_db_items:
             db_id = item['id']
             plex_words = set(normalize_title(item['title']))
             
-            for t in torrents:
-                t_words = set(normalize_title(t.name))
+            for t, t_words in precomputed_torrents:
                 if plex_words.issubset(t_words):
                     is_completed = (t.progress >= 1.0 or t.completion_on != -1)
                     progress = float(t.progress)
