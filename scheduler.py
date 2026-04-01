@@ -290,6 +290,10 @@ def process_queue():
     try:
         qbt_client = downloader.get_qbt_client()
         active_count = downloader.get_active_downloads_count(qbt_client)
+        if active_count < 0:
+            print("Error retrieving active downloads count. Waiting.")
+            return
+
         if active_count >= 2:
             print(f"Queue full ({active_count} active). Waiting.")
             return
