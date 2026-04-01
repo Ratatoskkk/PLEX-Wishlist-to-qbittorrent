@@ -16,7 +16,7 @@ import urllib.parse
 import re
 
 # Validation check
-required_vars = ['PLEX_URL', 'PLEX_TOKEN', 'AITHER_API_KEY', 'QBITTORRENT_URL', 'QBITTORRENT_USERNAME', 'QBITTORRENT_PASSWORD']
+required_vars = ['PLEX_URL', 'PLEX_TOKEN', 'AITHER_API_KEY', 'QBITTORRENT_URL', 'QBITTORRENT_USERNAME', 'QBITTORRENT_PASSWORD', 'WEB_PASSWORD']
 missing = [v for v in required_vars if not os.getenv(v)]
 
 if missing:
@@ -55,6 +55,26 @@ bg_scheduler.add_job(func=scheduler.monitor_downloads, trigger="interval", secon
 bg_scheduler.start()
 
 from flask import send_from_directory
+
+def check_auth(username, password):
+    """This function is called to check if a username / password combination is valid."""
+    env_user = os.getenv('WEB_USERNAME', 'admin')
+    env_pass = os.getenv('WEB_PASSWORD')
+    return secrets.compare_digest(username, env_user) and secrets.compare_digest(password, env_pass)
+
+def authenticate():
+    """Sends a 401 response that enables basic auth"""
+    return Response(
+    'Could not verify your access level for that URL.\n'
+    'You have to login with proper credentials', 401,
+    {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+@app.before_request
+def require_auth():
+    auth = request.authorization
+    if not auth or not check_auth(auth.username, auth.password):
+        return authenticate()
+
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
