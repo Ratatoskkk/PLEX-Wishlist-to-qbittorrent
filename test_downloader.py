@@ -64,13 +64,6 @@ class TestDownloader(unittest.TestCase):
         self.assertFalse(result)
         mock_client.torrents_add.assert_called_once_with(urls=download_link, save_path=save_path, is_paused=False)
 
-    def test_is_full_disc(self):
-        self.assertTrue(downloader.is_full_disc("Full Disc", "Some Movie"))
-        self.assertTrue(downloader.is_full_disc("Movie", "Some Movie Full Disc"))
-        self.assertTrue(downloader.is_full_disc("BD50", "Some Movie"))
-        self.assertTrue(downloader.is_full_disc("BD25", "Some Movie"))
-        self.assertFalse(downloader.is_full_disc("Remux", "Some Movie Remux"))
-
     def test_parse_tv_torrents(self):
         # Arrange
         mock_torrents = [
@@ -263,6 +256,53 @@ class TestDownloader(unittest.TestCase):
         self.assertEqual(downloader.normalize_title("Show Name S01"), ["show", "name", "s01"])
         self.assertEqual(downloader.normalize_title("Show.Name.S01E01.1080p"), ["show", "name", "s01e01", "1080p"])
 
+class TestIsFullDisc(unittest.TestCase):
+    def test_is_full_disc_true_positives_type(self):
+        # Test exact match in type
+        self.assertTrue(downloader.is_full_disc('full disc', 'movie'))
+        self.assertTrue(downloader.is_full_disc('bd50', 'movie'))
+        self.assertTrue(downloader.is_full_disc('bd25', 'movie'))
+
+        # Test substring match in type
+        self.assertTrue(downloader.is_full_disc('1080p full disc', 'movie'))
+        self.assertTrue(downloader.is_full_disc('remux bd50', 'movie'))
+
+        # Test mixed case
+        self.assertTrue(downloader.is_full_disc('Full Disc', 'movie'))
+        self.assertTrue(downloader.is_full_disc('BD50', 'movie'))
+
+    def test_is_full_disc_true_positives_name(self):
+        # Test exact match in name
+        self.assertTrue(downloader.is_full_disc('movie', 'Movie Name Full Disc'))
+        self.assertTrue(downloader.is_full_disc('movie', 'Movie BD50'))
+        self.assertTrue(downloader.is_full_disc('movie', 'Movie BD25'))
+
+        # Test mixed case
+        self.assertTrue(downloader.is_full_disc('movie', 'Movie Name FULL DISC'))
+        self.assertTrue(downloader.is_full_disc('movie', 'Movie bd50'))
+
+    def test_is_full_disc_false_positives(self):
+        # Should not match partial words
+        self.assertFalse(downloader.is_full_disc('full', 'movie'))
+        self.assertFalse(downloader.is_full_disc('disc', 'movie'))
+        self.assertFalse(downloader.is_full_disc('bd', 'movie'))
+        self.assertFalse(downloader.is_full_disc('movie', 'A full movie'))
+        self.assertFalse(downloader.is_full_disc('movie', 'A movie disc'))
+        self.assertFalse(downloader.is_full_disc('movie', 'Movie bd'))
+
+    def test_is_full_disc_legitimate_releases(self):
+        # Typical releases that are not full discs
+        self.assertFalse(downloader.is_full_disc('remux', 'Movie 1080p Remux'))
+        self.assertFalse(downloader.is_full_disc('movie', 'Movie 4K HDR'))
+        self.assertFalse(downloader.is_full_disc('web-dl', 'Movie 1080p WEB-DL'))
+        self.assertFalse(downloader.is_full_disc('bluray', 'Movie 1080p BluRay'))
+
+    def test_is_full_disc_edge_cases(self):
+        # Empty strings
+        self.assertFalse(downloader.is_full_disc('', ''))
+
+        # Numbers only
+        self.assertFalse(downloader.is_full_disc('1080', '2160'))
 
 if __name__ == '__main__':
     unittest.main()
