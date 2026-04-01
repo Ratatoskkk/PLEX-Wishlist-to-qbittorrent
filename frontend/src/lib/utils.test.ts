@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatSize } from './utils';
+import { formatSize, formatTime } from './utils';
 
 describe('formatSize', () => {
   it('should return "0 B" for 0 bytes', () => {
@@ -33,5 +33,36 @@ describe('formatSize', () => {
   it('should round to 2 decimal places', () => {
     expect(formatSize(1234)).toBe('1.21 KB');
     expect(formatSize(1234567)).toBe('1.18 MB');
+  });
+});
+
+describe('formatTime', () => {
+  it('should return "∞" for negative inputs', () => {
+    expect(formatTime(-1)).toBe('∞');
+    expect(formatTime(-100)).toBe('∞');
+  });
+
+  it('should return "∞" for inputs >= 8640000', () => {
+    expect(formatTime(8640000)).toBe('∞');
+    expect(formatTime(10000000)).toBe('∞');
+  });
+
+  it('should format seconds correctly', () => {
+    expect(formatTime(0)).toBe('0s');
+    expect(formatTime(45)).toBe('45s');
+    expect(formatTime(59)).toBe('59s');
+  });
+
+  it('should format minutes and seconds correctly', () => {
+    expect(formatTime(60)).toBe('1m 0s');
+    expect(formatTime(90)).toBe('1m 30s');
+    expect(formatTime(3599)).toBe('59m 59s');
+  });
+
+  it('should format hours and minutes correctly', () => {
+    expect(formatTime(3600)).toBe('1h 0m');
+    expect(formatTime(3660)).toBe('1h 1m');
+    expect(formatTime(7325)).toBe('2h 2m');
+    expect(formatTime(8639999)).toBe('2399h 59m');
   });
 });
