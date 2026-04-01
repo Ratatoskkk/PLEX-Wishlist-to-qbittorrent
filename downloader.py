@@ -215,7 +215,7 @@ def get_active_downloads_count(qbt_client: qbittorrentapi.Client) -> int:
         return len(torrents)
     except Exception as e:
         print(f"Error getting active downloads count: {e}")
-        return 0
+        return -1
 
 def send_to_qbittorrent(qbt_client: qbittorrentapi.Client, download_link: str, save_path: str) -> bool:
     """Send a download URL to qBittorrent."""
