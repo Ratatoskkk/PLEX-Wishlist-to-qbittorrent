@@ -46,6 +46,35 @@ class TestScheduler(unittest.TestCase):
         finally:
             downloader.normalize_title = original_normalize_title
 
+    def test_exact_episode_match(self):
+        self.assertTrue(is_already_downloaded(["Show A S01E05", "Other Show S01E05"], 1, 5))
+
+    def test_different_episode_same_show(self):
+        self.assertFalse(is_already_downloaded(["Show A S01E04"], 1, 5))
+
+    def test_same_episode_different_show(self):
+        # Assumes relevant_qbt_names pre-filtered
+        self.assertTrue(is_already_downloaded(["Show B S01E05"], 1, 5))
+
+    def test_season_pack_match(self):
+        self.assertTrue(is_already_downloaded(["Show A S01 1080p"], 1))
+
+    def test_season_pack_requested_but_single_episode_exists(self):
+        self.assertFalse(is_already_downloaded(["Show A S01E05 1080p"], 1))
+
+    def test_episode_match_with_dots_spaces(self):
+        self.assertTrue(is_already_downloaded(["Show A S01.E05", "Show A S01 E05"], 1, 5))
+
+    def test_season_pack_with_multiple_existing(self):
+        self.assertTrue(is_already_downloaded(["Other Show S01", "Show A S01"], 1))
+
+    def test_season_pack_wrong_season(self):
+        self.assertFalse(is_already_downloaded(["Show A S02"], 1))
+
+    def test_empty_existing_torrents(self):
+        self.assertFalse(is_already_downloaded([], 1, 1))
+        self.assertFalse(is_already_downloaded([], 1))
+
     def test_extract_tmdb_id_success(self):
         mock_item = MagicMock()
         mock_guid = MagicMock()
