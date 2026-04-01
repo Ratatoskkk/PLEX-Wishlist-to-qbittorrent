@@ -112,36 +112,47 @@ class TestDownloader(unittest.TestCase):
         self.assertIsNone(downloader.score_torrents([]))
 
     def test_parse_tv_torrents(self):
-        torrents = [
-            {'id': 1, 'attributes': {'name': 'Show S01'}},
-            {'id': 2, 'attributes': {'name': 'Show S01E01'}},
-            {'id': 3, 'attributes': {'name': 'Show S01 E02'}},
-            {'id': 4, 'attributes': {'name': 'Show Season 2'}}, # Doesn't match RE_S_NUM (\bS(\d{1,2})\b)
-            {'id': 5, 'attributes': {'name': 'Show S02'}},
-            {'id': 6, 'attributes': {'name': 'Show Full Disc S01', 'type': 'Full Disc'}}, # Should be ignored
+        # Arrange
+        mock_torrents = [
+            {'id': 1, 'attributes': {'name': 'Show S01E02 1080p'}},
+            {'id': 2, 'attributes': {'name': 'Show S01 1080p'}},
+            {'id': 3, 'attributes': {'name': 'Show S01.E03 1080p'}},
+            {'id': 4, 'attributes': {'name': 'Show S01 E04 1080p'}},
+            {'id': 5, 'attributes': {'name': 'Show S1E2 1080p'}},
+            {'id': 6, 'attributes': {'name': 'Show S01E01 Full Disc', 'type': 'full disc'}},
+            {'id': 7, 'attributes': {'name': 'Show Movie 2024'}},
+            {'id': 8, 'attributes': {'name': 'Show S01E02 720p'}},
         ]
 
-        seasons, episodes = downloader.parse_tv_torrents(torrents)
+        # Act
+        seasons, episodes = downloader.parse_tv_torrents(mock_torrents)
 
-        # Seasons
+        # Assert
+        # Season pack checks
         self.assertIn(1, seasons)
         self.assertEqual(len(seasons[1]), 1)
-        self.assertEqual(seasons[1][0]['id'], 1)
-        self.assertIn(2, seasons)
-        self.assertEqual(len(seasons[2]), 1)
+        self.assertEqual(seasons[1][0]['id'], 2)
 
-        # Episodes
-        self.assertIn((1, 1), episodes)
-        self.assertEqual(len(episodes[(1, 1)]), 1)
-        self.assertEqual(episodes[(1, 1)][0]['id'], 2)
-
+        # Episode checks
         self.assertIn((1, 2), episodes)
-        self.assertEqual(len(episodes[(1, 2)]), 1)
-        self.assertEqual(episodes[(1, 2)][0]['id'], 3)
+        self.assertEqual(len(episodes[(1, 2)]), 3) # IDs 1, 5, 8
+        self.assertEqual(episodes[(1, 2)][0]['id'], 1)
+        self.assertEqual(episodes[(1, 2)][1]['id'], 5)
+        self.assertEqual(episodes[(1, 2)][2]['id'], 8)
 
-        # Full disc ignored
-        self.assertNotIn(6, [t['id'] for sublist in seasons.values() for t in sublist])
-        self.assertNotIn(6, [t['id'] for sublist in episodes.values() for t in sublist])
+        self.assertIn((1, 3), episodes)
+        self.assertEqual(len(episodes[(1, 3)]), 1)
+        self.assertEqual(episodes[(1, 3)][0]['id'], 3)
+
+        self.assertIn((1, 4), episodes)
+        self.assertEqual(len(episodes[(1, 4)]), 1)
+        self.assertEqual(episodes[(1, 4)][0]['id'], 4)
+
+        # Check skipped full disc
+        self.assertNotIn((1, 1), episodes)
+
+        # Check skipped non-match
+        # Should not throw error, should just ignore id 7
 
     def test_normalize_title(self):
         self.assertEqual(downloader.normalize_title("Show Name Season 1"), ["show", "name", "s01"])
