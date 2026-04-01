@@ -64,6 +64,13 @@ class TestDownloader(unittest.TestCase):
         self.assertFalse(result)
         mock_client.torrents_add.assert_called_once_with(urls=download_link, save_path=save_path, is_paused=False)
 
+    def test_is_full_disc(self):
+        self.assertTrue(downloader.is_full_disc("Full Disc", "Some Movie"))
+        self.assertTrue(downloader.is_full_disc("Movie", "Some Movie Full Disc"))
+        self.assertTrue(downloader.is_full_disc("BD50", "Some Movie"))
+        self.assertTrue(downloader.is_full_disc("BD25", "Some Movie"))
+        self.assertFalse(downloader.is_full_disc("Remux", "Some Movie Remux"))
+
     def test_parse_tv_torrents(self):
         # Arrange
         mock_torrents = [
@@ -213,6 +220,25 @@ class TestDownloader(unittest.TestCase):
         # Act & Assert
         self.assertEqual(downloader.filter_best_torrent(torrents_remux_in_name + torrents_no_remux).get('id'), 1)
         self.assertEqual(downloader.filter_best_torrent(torrents_remux_in_type + torrents_no_remux).get('id'), 2)
+
+    def test_score_torrents(self):
+        torrents = [
+            {'id': 1, 'attributes': {'name': 'Show S01E01 1080p', 'resolution': '1080p', 'size': 1000, 'download_link': 'link1'}},
+            {'id': 2, 'attributes': {'name': 'Show S01E01 4K', 'resolution': '2160p', 'size': 2000, 'download_link': 'link2'}},
+            {'id': 3, 'attributes': {'name': 'Show S01E01 4K HDR Remux', 'resolution': '2160p', 'size': 3000, 'download_link': 'link3'}},
+        ]
+
+        best = downloader.score_torrents(torrents)
+        self.assertIsNotNone(best)
+        self.assertEqual(best['id'], 3)
+        self.assertEqual(best['name'], 'Show S01E01 4K HDR Remux')
+
+        self.assertIsNone(downloader.score_torrents([]))
+
+    def test_normalize_title(self):
+        self.assertEqual(downloader.normalize_title("Show Name Season 1"), ["show", "name", "s01"])
+        self.assertEqual(downloader.normalize_title("Show Name S01"), ["show", "name", "s01"])
+        self.assertEqual(downloader.normalize_title("Show.Name.S01E01.1080p"), ["show", "name", "s01e01", "1080p"])
 
 
 if __name__ == '__main__':
