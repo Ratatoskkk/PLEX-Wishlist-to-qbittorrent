@@ -1,0 +1,7 @@
+1. Modify `is_already_downloaded` signature to accept a pre-filtered list of relevant qBittorrent torrent names.
+   Instead of taking `existing_qbt_names: List[str]` and computing normalization and subsets on every call, we will change it to `relevant_qbt_names: List[str]` containing only torrent names that match the show's title.
+2. In `process_show`, calculate the `relevant_qbt_names` once before the loops over seasons and episodes.
+   The subset check `normalized_title_words.issubset(t_words) or (title.lower() in t_name.lower())` is currently done in `is_already_downloaded` inside loops over seasons and episodes. Moving it out to `process_show` avoids redundant normalizations.
+3. Remove the redundant subset check inside `is_already_downloaded`.
+   The `is_already_downloaded` function will simply check for season/episode matches using regex.
+4. Run standard Python lints/tests and execute my custom benchmark.
