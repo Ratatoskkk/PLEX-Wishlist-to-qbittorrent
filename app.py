@@ -54,7 +54,7 @@ bg_scheduler.add_job(func=scheduler.process_queue, trigger="interval", seconds=1
 bg_scheduler.add_job(func=scheduler.monitor_downloads, trigger="interval", seconds=60, max_instances=1)
 bg_scheduler.start()
 
-from flask import send_from_directory, make_response
+from flask import send_from_directory
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
