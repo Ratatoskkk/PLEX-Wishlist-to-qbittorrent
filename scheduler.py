@@ -1,7 +1,6 @@
 import os
 import shutil
 import re
-import math
 from typing import List, Set, Tuple, Dict, Any, Optional
 from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
