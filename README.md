@@ -22,6 +22,7 @@ This project uses a **decoupled hybrid architecture**:
 - **Approval/Deny UI** — Approve or deny individual torrents or entire season packs from the web dashboard.
 - **Single-Instance Lock** — Prevents duplicate background daemons from spawning when `run.bat` is clicked multiple times.
 - **Headless System Tray** — Runs entirely in the background via a Windows System Tray icon.
+- **Basic Authentication** — The web dashboard and API are protected by credentials configured in your `.env` file.
 
 ## Setup
 
@@ -58,6 +59,8 @@ QBITTORRENT_USERNAME=admin
 QBITTORRENT_PASSWORD=password
 DOWNLOAD_DIR_1=E:\Torrent
 DOWNLOAD_DIR_2=D:\Torrent
+WEB_USERNAME=admin
+WEB_PASSWORD=choose_a_strong_password
 ```
 
 > Find your Plex token via [this guide](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
@@ -97,13 +100,14 @@ run.bat
 
 ```
 plex_aither_automation/
-├── app.py              # Flask REST API + SPA host
+├── app.py              # Flask REST API + SPA host (with Basic Auth)
 ├── scheduler.py        # APScheduler jobs (watchlist + download monitor)
 ├── downloader.py       # Aither API search + qBittorrent integration
 ├── database.py         # SQLite history with progress/ETA tracking
 ├── tray.py             # Windows system tray daemon
 ├── run.bat             # Launch script
 ├── .env                # Your credentials (not committed)
+├── .env.example        # Template for your credentials
 ├── frontend/
 │   ├── src/
 │   │   ├── routes/     # SvelteKit pages (+layout.svelte, +page.svelte)
