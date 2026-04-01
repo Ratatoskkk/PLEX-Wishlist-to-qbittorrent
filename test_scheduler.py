@@ -1,3 +1,10 @@
+import sys
+from unittest.mock import MagicMock
+sys.modules['plexapi'] = MagicMock()
+sys.modules['plexapi.myplex'] = MagicMock()
+sys.modules['plexapi.server'] = MagicMock()
+sys.modules['qbittorrentapi'] = MagicMock()
+
 import downloader
 from scheduler import is_already_downloaded
 
@@ -13,13 +20,13 @@ def test_is_already_downloaded():
         "The Best Show S02 1080p"
     ]
 
-    assert is_already_downloaded("The Best Show", existing_qbt_names, 1, 1) == True
-    assert is_already_downloaded("The Best Show", existing_qbt_names, 1, 3) == False
-    assert is_already_downloaded("Another Show", existing_qbt_names, 2, 5) == True
-    assert is_already_downloaded("Another Show", existing_qbt_names, 2, 6) == False
+    assert is_already_downloaded(existing_qbt_names, 1, 1) == True
+    assert is_already_downloaded(existing_qbt_names, 1, 3) == False
+    assert is_already_downloaded(existing_qbt_names, 2, 5) == True
+    assert is_already_downloaded(existing_qbt_names, 2, 6) == False
 
-    assert is_already_downloaded("The Best Show", existing_qbt_names, 2) == True
-    assert is_already_downloaded("The Best Show", existing_qbt_names, 3) == False
+    assert is_already_downloaded(existing_qbt_names, 2) == True
+    assert is_already_downloaded(existing_qbt_names, 3) == False
 
 test_is_already_downloaded()
 print("Tests pass!")
