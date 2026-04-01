@@ -62,8 +62,11 @@ def serve_spa(path):
     if path.startswith('api/'):
         return jsonify({"error": "API route not found"}), 404
         
-    full_path = os.path.join(app.static_folder, path)
-    if path != '' and os.path.exists(full_path):
+    abs_static = os.path.abspath(app.static_folder)
+    full_path = os.path.abspath(os.path.join(abs_static, path))
+
+    # Securely check if the requested path is within the static folder before probing the filesystem
+    if path != '' and os.path.commonpath([abs_static, full_path]) == abs_static and os.path.exists(full_path):
         return send_from_directory(app.static_folder, path)
     else:
         return send_from_directory(app.static_folder, 'index.html')
