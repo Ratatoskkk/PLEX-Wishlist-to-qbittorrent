@@ -64,5 +64,28 @@ class TestDownloader(unittest.TestCase):
         self.assertFalse(result)
         mock_client.torrents_add.assert_called_once_with(urls=download_link, save_path=save_path, is_paused=False)
 
+    def test_score_torrents_empty_list(self):
+        # Act
+        result = downloader.score_torrents([])
+
+        # Assert
+        self.assertIsNone(result)
+
+    def test_score_torrents_poorly_formatted(self):
+        # Act
+        result_empty_dict = downloader.score_torrents([{}])
+        result_empty_attrs = downloader.score_torrents([{'attributes': {}}])
+
+        # Assert
+        expected_fallback = {
+            'id': None,
+            'name': '',
+            'size': 0,
+            'download_link': None,
+            'resolution': 'Unknown'
+        }
+        self.assertEqual(result_empty_dict, expected_fallback)
+        self.assertEqual(result_empty_attrs, expected_fallback)
+
 if __name__ == '__main__':
     unittest.main()
