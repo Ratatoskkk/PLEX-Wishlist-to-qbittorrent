@@ -165,10 +165,12 @@
   }
 
   .empty-state {
-    padding: 3rem;
+    padding: 48px;
     text-align: center;
-    color: var(--text-muted);
+    color: var(--border-strong);
+    font-family: var(--font-body);
     font-style: italic;
+    font-size: 19.2px;
   }
 
   table {
@@ -177,25 +179,26 @@
     text-align: left;
 
     th {
-      padding: 1rem 1.5rem;
-      background: rgba(0,0,0,0.2);
-      color: var(--text-muted);
+      padding: 16px 24px;
+      color: var(--border-strong);
       font-weight: 500;
-      font-size: 0.85rem;
+      font-size: 13px;
+      font-family: var(--font-system);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.048px;
+      border-bottom: 2px solid var(--border-primary);
     }
 
     td {
-      padding: 1.25rem 1.5rem;
-      border-bottom: 1px solid var(--border-glass);
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border-primary);
       vertical-align: middle;
     }
 
     tr:last-child td { border-bottom: none; }
 
     tr.downloading {
-      background: rgba(99, 102, 241, 0.04);
+      background: var(--surface-300);
     }
   }
 
@@ -204,122 +207,106 @@
   .title-cell {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 12px;
     flex-wrap: wrap;
 
-    .title-text { font-weight: 500; }
+    .title-text { 
+      font-family: var(--font-display);
+      font-weight: 400; 
+      font-size: 16px;
+    }
     .res-badge {
-      font-size: 0.65rem;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-weight: 600;
-      background: rgba(255,255,255,0.1);
-      color: var(--text-muted);
+      font-family: var(--font-code);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-weight: 400;
+      letter-spacing: -0.275px;
+      background: var(--surface-500);
+      color: var(--cursor-dark);
       white-space: nowrap;
     }
   }
 
   .status-badge {
-    font-size: 0.75rem;
+    font-family: var(--font-system);
+    font-size: 12px;
     padding: 4px 8px;
-    border-radius: 6px;
+    border-radius: 4px;
     font-weight: 600;
     white-space: nowrap;
+    letter-spacing: 0.053px;
 
-    &.pending_approval { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
-    &.downloading      { background: rgba(99, 102, 241, 0.2); color: var(--accent); }
-    &.completed        { background: rgba(16, 185, 129, 0.2); color: var(--success); }
-    &.queued           { background: rgba(255, 255, 255, 0.1); color: var(--text-main); }
-    &.error, &.denied  { background: rgba(239, 68, 68, 0.2);  color: var(--danger); }
+    &.pending_approval { background: rgba(192, 133, 50, 0.15); color: #c08532; }
+    &.downloading      { background: var(--surface-200); color: var(--color-accent); border: 1px solid var(--border-primary); }
+    &.completed        { background: rgba(31, 138, 101, 0.1); color: var(--color-success); }
+    &.queued           { background: var(--surface-300); color: var(--border-strong); }
+    &.error, &.denied  { background: rgba(207, 45, 86, 0.1);  color: var(--color-error); }
   }
 
   .progress-container {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 6px;
     min-width: 160px;
   }
 
   .progress-bar-bg {
-    height: 6px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 3px;
+    height: 4px;
+    background: var(--border-primary);
+    border-radius: 2px;
     overflow: hidden;
-    // GPU-accelerated compositing layer — prevents layout thrash on width changes
     will-change: contents;
   }
 
   .progress-fill {
     height: 100%;
-    border-radius: 3px;
-    background: var(--accent);
-    // NO CSS transition — rAF drives this directly at 60fps, CSS transition would double-animate
+    border-radius: 2px;
+    background: var(--color-accent);
     will-change: width;
 
-    &.live {
-      background: linear-gradient(90deg, var(--accent) 0%, #a78bfa 100%);
-      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
-
-      // Subtle shimmer sweep over the fill
-      &::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%);
-        background-size: 200% 100%;
-        animation: shimmer 2s linear infinite;
-      }
-    }
-
     &.completed {
-      background: var(--success);
+      background: var(--color-success);
     }
 
     position: relative;
     overflow: hidden;
   }
 
-  @keyframes shimmer {
-    0%   { background-position: -200% 0; }
-    100% { background-position:  200% 0; }
-  }
-
   .progress-stats {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.75rem;
-    // Fixed-width numbers prevent layout shift
+    font-size: 11px;
+    font-family: var(--font-code);
     font-variant-numeric: tabular-nums;
   }
 
   .pct {
-    font-weight: 700;
-    color: var(--accent);
-    min-width: 3.5ch;
+    font-weight: 400;
+    color: var(--color-accent);
+    min-width: 4ch;
   }
 
   .meta-row {
     display: flex;
-    gap: 0.75rem;
+    gap: 12px;
     align-items: center;
 
     .speed {
-      color: var(--success);
-      font-weight: 600;
-      font-size: 0.7rem;
+      color: var(--border-strong);
       min-width: 6ch;
       text-align: right;
     }
 
     .eta {
-      color: var(--text-muted);
+      color: var(--border-strong);
       min-width: 6ch;
       text-align: right;
     }
   }
 
-  .success-text { color: var(--success); font-weight: 600; }
-  .muted-text   { color: var(--text-muted); }
-  .date-col     { color: var(--text-muted); font-size: 0.85rem; white-space: nowrap; }
+  .success-text { color: var(--color-success); font-weight: 400; }
+  .muted-text   { color: var(--border-strong); }
+  .date-col     { color: var(--border-strong); font-size: 14px; white-space: nowrap; }
 </style>

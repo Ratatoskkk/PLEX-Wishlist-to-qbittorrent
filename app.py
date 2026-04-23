@@ -11,7 +11,8 @@ env_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(env_path)
 
 import secrets
-from flask import Flask, request, jsonify, Response, stream_with_context
+import hashlib
+from flask import Flask, request, jsonify, Response, stream_with_context, g
 from apscheduler.schedulers.background import BackgroundScheduler
 import database
 import scheduler
@@ -74,11 +75,20 @@ def authenticate():
     'You have to login with proper credentials', 401,
     {'WWW-Authenticate': 'Basic realm="Login Required"'})
 
+def get_auth_hash():
+    pwd = os.getenv('WEB_PASSWORD', '')
+    return hashlib.sha256(f"plexaither_persistent_{pwd}".encode()).hexdigest()
+
 @app.before_request
 def require_auth():
+    if request.cookies.get('plex_session') == get_auth_hash():
+        return None
+        
     auth = request.authorization
     if not auth or not check_auth(auth.username, auth.password):
         return authenticate()
+        
+    g.set_auth_cookie = True
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -97,6 +107,9 @@ def serve_spa(path):
 
 @app.after_request
 def force_mimetypes(response):
+    if getattr(g, 'set_auth_cookie', False):
+        response.set_cookie('plex_session', get_auth_hash(), max_age=10*365*24*60*60, httponly=True)
+
     if request.path.endswith('.js'):
         response.content_type = 'application/javascript'
     elif request.path.endswith('.css'):
@@ -248,7 +261,7 @@ def setup_tray():
         os._exit(0)
     
     icon = pystray.Icon("PlexTracker", create_image(), "PlexTracker Web Server", menu=pystray.Menu(
-        pystray.MenuItem("Open Dashboard", lambda: os.system("start http://localhost:5000")),
+        pystray.MenuItem("Open Dashboard", lambda: os.system("start http://plexauth.cc")),
         pystray.MenuItem("Quit", quit_action)
     ))
     return icon
@@ -262,10 +275,10 @@ if __name__ == '__main__':
         sys.stdout = open(os.devnull, 'w')
         sys.stderr = open(os.devnull, 'w')
 
-    print("Serving PlexTracker on http://0.0.0.0:5000. Check System Tray.")
+    print("Serving PlexTracker on http://plexauth.cc (Port 80). Check System Tray.")
     import logging
     logging.getLogger('waitress').setLevel(logging.ERROR) # Mute innocuous queue warnings
-    server_thread = threading.Thread(target=serve, args=(app,), kwargs={'host': '0.0.0.0', 'port': 5000, 'threads': 16}, daemon=True)
+    server_thread = threading.Thread(target=serve, args=(app,), kwargs={'host': '0.0.0.0', 'port': 80, 'threads': 16}, daemon=True)
     server_thread.start()
     
     icon = setup_tray()

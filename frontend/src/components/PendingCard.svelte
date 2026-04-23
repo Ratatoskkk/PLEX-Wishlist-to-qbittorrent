@@ -20,7 +20,7 @@
   }
 </script>
 
-<div class="pending-card glass-panel">
+<div class="pending-card cursor-card">
   <div class="card-header">
     <h3>{title}</h3>
     {#if items.length > 1}
@@ -58,19 +58,23 @@
   }
   
   .card-header {
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--border-glass);
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(0,0,0,0.2);
+    background: var(--surface-300);
     
-    h3 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+    h3 { 
+      margin: 0; 
+      font-size: 18px; 
+      font-weight: 400; 
+      letter-spacing: -0.11px;
+    }
     
     .group-actions {
       display: flex;
-      gap: 0.5rem;
-      button { padding: 4px 8px; font-size: 0.75rem; border-radius: 4px; }
+      gap: 8px;
     }
   }
   
@@ -80,11 +84,11 @@
   }
   
   .item-row {
-    padding: 1rem 1.25rem;
+    padding: 16px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--border-primary);
     
     &:last-child { border-bottom: none; }
   }
@@ -92,34 +96,39 @@
   .item-info {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 8px;
     
-    .item-title { font-weight: 500; font-size: 0.95rem; }
+    .item-title { 
+      font-weight: 400; 
+      font-size: 16px; 
+    }
     
     .item-meta {
       display: flex;
-      gap: 0.5rem;
+      gap: 8px;
       
       .badge {
-        font-size: 0.7rem;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-weight: 600;
-        background: rgba(255,255,255,0.1);
+        font-family: var(--font-code);
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 9999px;
+        font-weight: 400;
+        letter-spacing: -0.275px;
         
-        &.size { color: var(--warning); background: rgba(245, 158, 11, 0.15); }
-        &.res { color: var(--accent); background: rgba(99, 102, 241, 0.15); }
+        &.size { color: var(--border-strong); background: var(--surface-500); }
+        &.res { color: var(--cursor-dark); background: var(--surface-300); border: 1px solid var(--border-primary); }
       }
     }
   }
   
   .item-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: 8px;
     
     button {
-      padding: 6px 10px;
-      font-size: 1rem;
+      padding: 6px 12px;
+      font-family: var(--font-display);
+      font-size: 14px;
     }
   }
 </style>

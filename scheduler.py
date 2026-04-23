@@ -1,6 +1,7 @@
 import os
 import shutil
 import re
+import time
 from typing import List, Set, Tuple, Dict, Any, Optional
 from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
@@ -21,6 +22,13 @@ DOWNLOAD_DIR_2 = os.getenv('DOWNLOAD_DIR_2', 'E:\\Torrent')
 RE_TV_TITLE = re.compile(r'\((?:Season \d+|S\d+E\d+)\)', re.IGNORECASE)
 RE_S_NUM = re.compile(r'\bS(\d{1,2})\b', re.IGNORECASE)
 RE_E_NUM = re.compile(r'\bE(\d{1,2})\b', re.IGNORECASE)
+
+def delayed_remove_from_watchlist(account: MyPlexAccount, item):
+    """Wait 10 seconds before removing to give Plex time to settle internal states."""
+    title = getattr(item, 'title', 'Unknown Item')
+    print(f"Waiting 10 seconds before removing '{title}' from watchlist...")
+    time.sleep(10)
+    account.removeFromWatchlist(item)
 
 def get_plex_server() -> Optional[PlexServer]:
     """Guard clause pattern for optional Plex Server"""
@@ -74,7 +82,7 @@ def process_movie(item, account: MyPlexAccount, title: str, tmdb_id: Optional[st
     
     if database.is_already_recorded(aither_id):
         print(f"Skipping {title} — torrent {aither_id} already recorded. Removing from watchlist.")
-        account.removeFromWatchlist(item)
+        delayed_remove_from_watchlist(account, item)
         return
 
     is_large = float(size_bytes) > (100 * 1024 * 1024 * 1024)
@@ -90,7 +98,7 @@ def process_movie(item, account: MyPlexAccount, title: str, tmdb_id: Optional[st
         resolution=best_torrent.get('resolution', 'Unknown')
     )
     database.record_download(params)
-    account.removeFromWatchlist(item)
+    delayed_remove_from_watchlist(account, item)
     print(f"Processed and queued {title} from watchlist.")
 
 def get_watched_status(plex: Optional[PlexServer], title: str) -> Tuple[List[int], Set[Tuple[int, int]]]:
@@ -192,7 +200,7 @@ def process_show(item, account: MyPlexAccount, plex: Optional[PlexServer], qbt_c
         queue_tv_item(item, account, t_dict, name, tmdb_id, force_pending=force_pending)
         
     if items_to_queue:
-        account.removeFromWatchlist(item)
+        delayed_remove_from_watchlist(account, item)
         print(f"Processed TV Show {title}. 1:{len(items_to_queue)} items queued.")
     else:
         print(f"No suitable or un-watched seasons/episodes found on Aither for {title}.")
@@ -211,7 +219,6 @@ def queue_tv_item(item, account: MyPlexAccount, t_dict: Dict[str, Any], save_nam
         resolution=t_dict.get('resolution', 'Unknown')
     )
     database.record_download(params)
-    account.removeFromWatchlist(item)
     print(f"Successfully queued {save_name}.")
 
 def process_season(item, account: MyPlexAccount, title: str, tmdb_id: Optional[str]):
@@ -228,6 +235,7 @@ def process_season(item, account: MyPlexAccount, title: str, tmdb_id: Optional[s
         return
         
     queue_tv_item(item, account, best_t, f"{show_title} (Season {season_num})", tmdb_id)
+    delayed_remove_from_watchlist(account, item)
 
 def process_episode(item, account: MyPlexAccount, title: str, tmdb_id: Optional[str]):
     show_title = getattr(item, 'grandparentTitle', title)
@@ -244,6 +252,7 @@ def process_episode(item, account: MyPlexAccount, title: str, tmdb_id: Optional[
         return
         
     queue_tv_item(item, account, best_t, f"{show_title} (S{season_num:02d}E{episode_num:02d})", tmdb_id)
+    delayed_remove_from_watchlist(account, item)
 
 def check_watchlist():
     try:
@@ -294,11 +303,11 @@ def process_queue():
             print("Error retrieving active downloads count. Waiting.")
             return
 
-        if active_count >= 2:
+        if active_count >= 5:
             print(f"Queue full ({active_count} active). Waiting.")
             return
 
-        available_slots = 2 - active_count
+        available_slots = 5 - active_count
         for _ in range(available_slots):
             item = database.get_next_queued_item()
             if not item:
