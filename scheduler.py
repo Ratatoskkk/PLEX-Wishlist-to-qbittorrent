@@ -23,12 +23,20 @@ RE_TV_TITLE = re.compile(r'\((?:Season \d+|S\d+E\d+)\)', re.IGNORECASE)
 RE_S_NUM = re.compile(r'\bS(\d{1,2})\b', re.IGNORECASE)
 RE_E_NUM = re.compile(r'\bE(\d{1,2})\b', re.IGNORECASE)
 
+import threading
+
+def _do_delayed_remove(account: MyPlexAccount, item):
+    time.sleep(10)
+    try:
+        account.removeFromWatchlist(item)
+    except Exception as e:
+        pass
+
 def delayed_remove_from_watchlist(account: MyPlexAccount, item):
     """Wait 10 seconds before removing to give Plex time to settle internal states."""
     title = getattr(item, 'title', 'Unknown Item')
-    print(f"Waiting 10 seconds before removing '{title}' from watchlist...")
-    time.sleep(10)
-    account.removeFromWatchlist(item)
+    print(f"Scheduling removal of '{title}' from watchlist in 10s...")
+    threading.Thread(target=_do_delayed_remove, args=(account, item), daemon=True).start()
 
 def get_plex_server() -> Optional[PlexServer]:
     """Guard clause pattern for optional Plex Server"""
@@ -75,6 +83,7 @@ def process_movie(item, account: MyPlexAccount, title: str, tmdb_id: Optional[st
     best_torrent = downloader.search_aither(title, tmdb_id)
     if not best_torrent:
         print(f"No suitable torrent found for {title}.")
+        delayed_remove_from_watchlist(account, item)
         return
 
     size_bytes = best_torrent.get('size', 0)
@@ -113,27 +122,40 @@ def get_watched_status(plex: Optional[PlexServer], title: str) -> Tuple[List[int
             return watched_seasons, watched_episodes
             
         local_show = local_results[0]
-        max_local_season = 0
-        existing_seasons = []
         
-        for season in local_show.seasons():
-            s_num = season.seasonNumber
-            if s_num == 0: continue
+        # Single O(1) network query for all episodes
+        episodes = local_show.episodes()
+        if not episodes:
+            return watched_seasons, watched_episodes
             
-            existing_seasons.append(s_num)
-            max_local_season = max(max_local_season, s_num)
+        season_counts = {}
+        watched_counts = {}
+        max_local_season = 0
+        
+        for ep in episodes:
+            s = ep.parentIndex
+            e = ep.index
+            if s == 0: continue
+            
+            if s not in season_counts:
+                season_counts[s] = 0
+                watched_counts[s] = 0
+                max_local_season = max(max_local_season, s)
                 
-            eps = season.episodes()
-            if not eps:
-                watched_seasons.append(s_num)
-                continue
-            
-            if all(ep.isWatched for ep in eps):
-                watched_seasons.append(s_num)
-            else:
-                watched_episodes.update((s_num, ep.episodeNumber) for ep in eps if ep.isWatched)
-                    
-        watched_seasons.extend(s for s in range(1, max_local_season) if s not in existing_seasons)
+            season_counts[s] += 1
+            if ep.isWatched:
+                watched_counts[s] += 1
+                watched_episodes.add((s, e))
+                
+        existing_seasons = set(season_counts.keys())
+        
+        for s in range(1, max_local_season):
+            if s not in existing_seasons:
+                watched_seasons.append(s)
+                
+        for s, total in season_counts.items():
+            if total > 0 and watched_counts[s] == total:
+                watched_seasons.append(s)
                 
     except Exception as e:
         print(f"Error checking local Plex explicitly for {title}: {e}")
@@ -156,21 +178,50 @@ def is_already_downloaded(relevant_qbt_names: List[str], s_num: int, e_num: Opti
                 return True
     return False
 
-def process_show(item, account: MyPlexAccount, plex: Optional[PlexServer], qbt_client: qbittorrentapi.Client, title: str, tmdb_id: Optional[str]):
+def track_tv_show(show_title: str, tmdb_id: Optional[str]):
+    if not tmdb_id:
+        return
+    details = downloader.fetch_tmdb_tv_details(tmdb_id)
+    if not details:
+        return
+    status = details.get('status', '')
+    if status == 'Ended' or status == 'Canceled':
+        return
+        
+    next_ep = details.get('next_episode_to_air')
+    last_ep = details.get('last_episode_to_air')
+    
+    if next_ep:
+        database.add_tracked_episode(
+            tmdb_id=tmdb_id, 
+            show_title=show_title, 
+            season_num=next_ep.get('season_number', 1), 
+            episode_num=next_ep.get('episode_number', 1), 
+            air_date_str=next_ep.get('air_date')
+        )
+    if last_ep:
+        air_date = last_ep.get('air_date')
+        if air_date:
+            try:
+                from datetime import datetime, timedelta
+                dt = datetime.strptime(air_date, '%Y-%m-%d')
+                if datetime.now() - dt < timedelta(days=7):
+                    database.add_tracked_episode(
+                        tmdb_id=tmdb_id,
+                        show_title=show_title,
+                        season_num=last_ep.get('season_number', 1),
+                        episode_num=last_ep.get('episode_number', 1),
+                        air_date_str=air_date
+                    )
+            except Exception:
+                pass
+
+def process_show(item, account: MyPlexAccount, plex: Optional[PlexServer], title: str, tmdb_id: Optional[str], relevant_qbt_names: List[str]):
+    track_tv_show(title, tmdb_id)
     watched_seasons, watched_episodes = get_watched_status(plex, title)
     available_data = downloader.search_aither_tv(title, tmdb_id)
     season_packs = available_data.get('seasons', {})
     single_eps = available_data.get('episodes', {})
-    existing_qbt_names = downloader.get_all_torrent_names(qbt_client)
-    
-    # Pre-filter qBittorrent names that match the show title
-    title_lower = title.lower()
-    normalized_title_words = set(downloader.normalize_title(title))
-    relevant_qbt_names = []
-    for t_name in existing_qbt_names:
-        t_words = set(downloader.normalize_title(t_name))
-        if normalized_title_words.issubset(t_words) or (title_lower in t_name.lower()):
-            relevant_qbt_names.append(t_name)
 
     items_to_queue = []
     distinct_seasons_queued = set()
@@ -204,6 +255,7 @@ def process_show(item, account: MyPlexAccount, plex: Optional[PlexServer], qbt_c
         print(f"Processed TV Show {title}. 1:{len(items_to_queue)} items queued.")
     else:
         print(f"No suitable or un-watched seasons/episodes found on Aither for {title}.")
+        delayed_remove_from_watchlist(account, item)
 
 def queue_tv_item(item, account: MyPlexAccount, t_dict: Dict[str, Any], save_name: str, tmdb_id: Optional[str], force_pending: bool = False):
     is_large = float(t_dict.get('size', 0)) > (100 * 1024 * 1024 * 1024)
@@ -223,6 +275,7 @@ def queue_tv_item(item, account: MyPlexAccount, t_dict: Dict[str, Any], save_nam
 
 def process_season(item, account: MyPlexAccount, title: str, tmdb_id: Optional[str]):
     show_title = getattr(item, 'parentTitle', title)
+    track_tv_show(show_title, tmdb_id)
     season_num = getattr(item, 'index', 1) 
     print(f"Processing explicit Season Watchlist: {show_title} Season {season_num}")
     
@@ -232,6 +285,7 @@ def process_season(item, account: MyPlexAccount, title: str, tmdb_id: Optional[s
     
     if not best_t:
         print(f"No suitable pack found on Aither for {show_title} Season {season_num}.")
+        delayed_remove_from_watchlist(account, item)
         return
         
     queue_tv_item(item, account, best_t, f"{show_title} (Season {season_num})", tmdb_id)
@@ -239,6 +293,7 @@ def process_season(item, account: MyPlexAccount, title: str, tmdb_id: Optional[s
 
 def process_episode(item, account: MyPlexAccount, title: str, tmdb_id: Optional[str]):
     show_title = getattr(item, 'grandparentTitle', title)
+    track_tv_show(show_title, tmdb_id)
     season_num = getattr(item, 'parentIndex', 1)
     episode_num = getattr(item, 'index', 1)
     print(f"Processing explicit Episode Watchlist: {show_title} S{season_num:02d}E{episode_num:02d}")
@@ -249,6 +304,7 @@ def process_episode(item, account: MyPlexAccount, title: str, tmdb_id: Optional[
     
     if not best_t:
         print(f"No suitable file found on Aither for {show_title} S{season_num:02d}E{episode_num:02d}.")
+        delayed_remove_from_watchlist(account, item)
         return
         
     queue_tv_item(item, account, best_t, f"{show_title} (S{season_num:02d}E{episode_num:02d})", tmdb_id)
@@ -256,6 +312,7 @@ def process_episode(item, account: MyPlexAccount, title: str, tmdb_id: Optional[
 
 def check_watchlist():
     try:
+        downloader.clear_caches()
         if not PLEX_TOKEN:
             raise ValueError("PLEX_TOKEN is missing")
             
@@ -263,6 +320,8 @@ def check_watchlist():
         plex = get_plex_server()
         qbt_client = downloader.get_qbt_client()
         watchlist = account.watchlist()
+        
+        existing_qbt_names = downloader.get_all_torrent_names(qbt_client)
         
         for item in watchlist:
             title = item.title
@@ -272,7 +331,14 @@ def check_watchlist():
             if item_type == 'movie':
                 process_movie(item, account, title, tmdb_id)
             elif item_type == 'show':
-                process_show(item, account, plex, qbt_client, title, tmdb_id)
+                title_lower = title.lower()
+                normalized_title_words = set(downloader.normalize_title(title))
+                relevant_qbt_names = []
+                for t_name in existing_qbt_names:
+                    t_words = set(downloader.normalize_title(t_name))
+                    if normalized_title_words.issubset(t_words) or (title_lower in t_name.lower()):
+                        relevant_qbt_names.append(t_name)
+                process_show(item, account, plex, title, tmdb_id, relevant_qbt_names)
             elif item_type == 'season':
                 process_season(item, account, title, tmdb_id)
             elif item_type == 'episode':
@@ -318,7 +384,7 @@ def process_queue():
             
             if selected_dir:
                 print(f"Sending {item['title']} to {selected_dir}")
-                success = downloader.send_to_qbittorrent(qbt_client, item['download_link'], selected_dir)
+                success = downloader.send_to_qbittorrent(qbt_client, item['download_link'], selected_dir, item['id'])
                 if success:
                     database.update_download_status(item['id'], 'downloading')
                 else:
@@ -351,3 +417,59 @@ def monitor_downloads():
             
     except Exception as e:
         print(f"Error monitoring downloads: {e}")
+
+def poll_tracked_episodes():
+    try:
+        downloader.clear_caches()
+        from datetime import datetime, timedelta
+        
+        waiting = database.get_episodes_by_status('waiting')
+        now = datetime.now()
+        
+        for ep in waiting:
+            if not ep['air_date']:
+                continue
+            try:
+                air_dt = datetime.strptime(ep['air_date'], '%Y-%m-%d')
+                if now >= air_dt + timedelta(hours=24):
+                    database.update_tracked_episode_status(ep['id'], 'polling')
+                    print(f"Episode {ep['show_title']} S{ep['season_num']:02d}E{ep['episode_num']:02d} is now polling.")
+            except Exception as e:
+                print(f"Error parsing air date: {e}")
+                
+        polling = database.get_episodes_by_status('polling')
+        if not polling:
+            return
+            
+        print(f"Querying Aither for {len(polling)} due episodes...")
+        for ep in polling:
+            tmdb_id = ep['tmdb_id']
+            show_title = ep['show_title']
+            s_num = ep['season_num']
+            e_num = ep['episode_num']
+            
+            if ep['air_date']:
+                try:
+                    air_dt = datetime.strptime(ep['air_date'], '%Y-%m-%d')
+                    if now >= air_dt + timedelta(hours=48):
+                        database.update_tracked_episode_status(ep['id'], 'give_up')
+                        print(f"Giving up on polling {show_title} S{s_num:02d}E{e_num:02d} (48h passed).")
+                        track_tv_show(show_title, tmdb_id)
+                        continue
+                except Exception:
+                    pass
+                    
+            data = downloader.search_aither_tv(show_title, tmdb_id)
+            episodes = data.get('episodes', {})
+            best_t = episodes.get((s_num, e_num))
+            
+            if best_t:
+                if not database.is_already_recorded(best_t.get('id', '')):
+                    save_name = f"{show_title} (S{s_num:02d}E{e_num:02d})"
+                    queue_tv_item(None, None, best_t, save_name, tmdb_id, force_pending=False)
+                    
+                database.update_tracked_episode_status(ep['id'], 'downloaded')
+                print(f"Successfully found and queued polled episode {show_title} S{s_num:02d}E{e_num:02d}.")
+                track_tv_show(show_title, tmdb_id)
+    except Exception as e:
+        print(f"Error polling tracked episodes: {e}")

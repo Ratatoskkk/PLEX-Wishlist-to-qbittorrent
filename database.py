@@ -43,6 +43,17 @@ def init_db():
                 last_error TEXT
             )
         ''')
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS tracked_episodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tmdb_id TEXT NOT NULL,
+                show_title TEXT NOT NULL,
+                season_num INTEGER NOT NULL,
+                episode_num INTEGER NOT NULL,
+                air_date TIMESTAMP,
+                status TEXT NOT NULL -- 'waiting', 'polling', 'downloaded', 'give_up'
+            )
+        ''')
         # Initialize status row
         db.execute('INSERT OR IGNORE INTO system_status (id, last_checked) VALUES (1, NULL)')
         db.commit()
@@ -107,6 +118,27 @@ def is_already_recorded(aither_torrent_id):
             (str(aither_torrent_id),)
         ).fetchone()
         return row is not None
+
+def add_tracked_episode(tmdb_id: str, show_title: str, season_num: int, episode_num: int, air_date_str: str):
+    with get_db() as db:
+        existing = db.execute('SELECT id FROM tracked_episodes WHERE tmdb_id = ? AND season_num = ? AND episode_num = ?', 
+                              (tmdb_id, season_num, episode_num)).fetchone()
+        if existing:
+            return
+        db.execute('''
+            INSERT INTO tracked_episodes (tmdb_id, show_title, season_num, episode_num, air_date, status)
+            VALUES (?, ?, ?, ?, ?, 'waiting')
+        ''', (tmdb_id, show_title, season_num, episode_num, air_date_str))
+        db.commit()
+
+def get_episodes_by_status(status: str):
+    with get_db() as db:
+        return db.execute('SELECT * FROM tracked_episodes WHERE status = ?', (status,)).fetchall()
+
+def update_tracked_episode_status(ep_id: int, status: str):
+    with get_db() as db:
+        db.execute('UPDATE tracked_episodes SET status = ? WHERE id = ?', (status, ep_id))
+        db.commit()
 
 if __name__ == '__main__':
     init_db()

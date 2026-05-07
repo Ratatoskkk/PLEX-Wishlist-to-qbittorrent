@@ -3,6 +3,7 @@ import requests
 import qbittorrentapi
 import re
 from typing import Dict, Any, List, Optional, Tuple
+import functools
 from dotenv import load_dotenv
 
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -32,6 +33,7 @@ def get_qbt_client() -> qbittorrentapi.Client:
     qbt_client.auth_log_in()
     return qbt_client
 
+@functools.lru_cache(maxsize=64)
 def search_aither(title: str, tmdb_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Search Aither API for the optimal movie torrent."""
     headers = {
@@ -177,6 +179,7 @@ def parse_tv_torrents(torrents: List[Dict[str, Any]]) -> Tuple[Dict[int, List[Di
             
     return seasons, episodes
 
+@functools.lru_cache(maxsize=64)
 def search_aither_tv(title: str, tmdb_id: Optional[str] = None) -> Dict[str, Dict[Any, Any]]:
     """Finds best season packs and episodes for a TV show."""
     headers = {
@@ -217,14 +220,30 @@ def get_active_downloads_count(qbt_client: qbittorrentapi.Client) -> int:
         print(f"Error getting active downloads count: {e}")
         return -1
 
-def send_to_qbittorrent(qbt_client: qbittorrentapi.Client, download_link: str, save_path: str) -> bool:
+def send_to_qbittorrent(qbt_client: qbittorrentapi.Client, download_link: str, save_path: str, db_id: Optional[int] = None) -> bool:
     """Send a download URL to qBittorrent."""
     try:
-        qbt_client.torrents_add(urls=download_link, save_path=save_path, is_paused=False)
+        tags = f"plexaither_{db_id}" if db_id else ""
+        qbt_client.torrents_add(urls=download_link, save_path=save_path, is_paused=False, tags=tags)
         return True
     except Exception as e:
         print(f"Error sending to qbittorrent: {e}")
         return False
+
+@functools.lru_cache(maxsize=64)
+def fetch_tmdb_tv_details(tmdb_id: str) -> Optional[Dict[str, Any]]:
+    tmdb_key = os.getenv('TMDB_API_KEY')
+    if not tmdb_key:
+        print("TMDB_API_KEY missing, cannot fetch TV details.")
+        return None
+    url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Error fetching TMDB for {tmdb_id}: {e}")
+        return None
 
 def normalize_title(title: str) -> List[str]:
     # Convert 'Season X' to 'S0X' for scene torrent matching
@@ -242,19 +261,42 @@ def get_active_downloads_status(qbt_client: qbittorrentapi.Client, active_db_ite
         for item in active_db_items:
             db_id = item['id']
             plex_words = set(normalize_title(item['title']))
+            matched_torrent = None
             
-            for t, t_words in precomputed_torrents:
-                if plex_words.issubset(t_words):
-                    is_completed = (t.progress >= 1.0 or t.completion_on != -1)
-                    progress = float(t.progress)
-                    eta = int(t.eta) if t.eta < 8640000 else -1 # qBittorrent uses 8640000 (100 days) for infinity
-                    
-                    status_updates[db_id] = {
-                        'status': 'completed' if is_completed else 'downloading',
-                        'progress': progress,
-                        'eta_seconds': eta
-                    }
+            # 1. Try matching by tag first (safest)
+            target_tag = f"plexaither_{db_id}"
+            for t, _ in precomputed_torrents:
+                tags = [tag.strip() for tag in getattr(t, 'tags', '').split(',')] if getattr(t, 'tags', '') else []
+                if target_tag in tags:
+                    matched_torrent = t
                     break
+            
+            # 2. Try heuristic matching if tag not found
+            if not matched_torrent:
+                for t, t_words in precomputed_torrents:
+                    if plex_words.issubset(t_words):
+                        matched_torrent = t
+                        break
+                    
+                    # Heuristic for bugs like Electric Dreams
+                    identifiers = {w for w in plex_words if re.match(r'^s\d+(e\d+)?$', w)}
+                    if identifiers and identifiers.issubset(t_words):
+                        non_id_plex = plex_words - identifiers
+                        overlap = non_id_plex.intersection(t_words)
+                        if any(len(w) > 3 for w in overlap) or len(overlap) >= 2:
+                            matched_torrent = t
+                            break
+
+            if matched_torrent:
+                is_completed = (matched_torrent.progress >= 1.0 or matched_torrent.completion_on != -1)
+                progress = float(matched_torrent.progress)
+                eta = int(matched_torrent.eta) if matched_torrent.eta < 8640000 else -1 # qBittorrent uses 8640000 (100 days) for infinity
+                
+                status_updates[db_id] = {
+                    'status': 'completed' if is_completed else 'downloading',
+                    'progress': progress,
+                    'eta_seconds': eta
+                }
                         
         return status_updates
     except Exception as e:
@@ -269,3 +311,9 @@ def get_all_torrent_names(qbt_client: qbittorrentapi.Client) -> List[str]:
     except Exception as e:
         print(f"Error getting torrent names: {e}")
         return []
+
+def clear_caches():
+    """Clear all LRU caches to prevent stale data between scheduled job runs."""
+    search_aither.cache_clear()
+    search_aither_tv.cache_clear()
+    fetch_tmdb_tv_details.cache_clear()

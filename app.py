@@ -22,7 +22,7 @@ import urllib.parse
 import re
 
 # Validation check
-required_vars = ['PLEX_URL', 'PLEX_TOKEN', 'AITHER_API_KEY', 'QBITTORRENT_URL', 'QBITTORRENT_USERNAME', 'QBITTORRENT_PASSWORD', 'WEB_PASSWORD']
+required_vars = ['PLEX_URL', 'PLEX_TOKEN', 'AITHER_API_KEY', 'QBITTORRENT_URL', 'QBITTORRENT_USERNAME', 'QBITTORRENT_PASSWORD', 'TMDB_API_KEY']
 missing = [v for v in required_vars if not os.getenv(v)]
 
 if missing:
@@ -58,37 +58,24 @@ bg_scheduler = BackgroundScheduler()
 bg_scheduler.add_job(func=scheduler.check_watchlist, trigger="interval", seconds=15, max_instances=1)
 bg_scheduler.add_job(func=scheduler.process_queue, trigger="interval", seconds=15, max_instances=1)
 bg_scheduler.add_job(func=scheduler.monitor_downloads, trigger="interval", seconds=60, max_instances=1)
+bg_scheduler.add_job(func=scheduler.poll_tracked_episodes, trigger="interval", minutes=30, max_instances=1)
 bg_scheduler.start()
 
 from flask import send_from_directory
 
-def check_auth(username, password):
-    """This function is called to check if a username / password combination is valid."""
-    env_user = os.getenv('WEB_USERNAME', 'admin')
-    env_pass = os.getenv('WEB_PASSWORD')
-    return secrets.compare_digest(username, env_user) and secrets.compare_digest(password, env_pass)
-
-def authenticate():
-    """Sends a 401 response that enables basic auth"""
-    return Response(
-    'Could not verify your access level for that URL.\n'
-    'You have to login with proper credentials', 401,
-    {'WWW-Authenticate': 'Basic realm="Login Required"'})
-
-def get_auth_hash():
-    pwd = os.getenv('WEB_PASSWORD', '')
-    return hashlib.sha256(f"plexaither_persistent_{pwd}".encode()).hexdigest()
-
 @app.before_request
-def require_auth():
-    if request.cookies.get('plex_session') == get_auth_hash():
+def restrict_to_local():
+    ip = request.remote_addr
+    if not ip:
+        return jsonify({"error": "Forbidden"}), 403
+    if ip.startswith('127.') or ip.startswith('192.168.') or ip.startswith('10.'):
         return None
-        
-    auth = request.authorization
-    if not auth or not check_auth(auth.username, auth.password):
-        return authenticate()
-        
-    g.set_auth_cookie = True
+    if ip.startswith('172.'):
+        parts = ip.split('.')
+        if len(parts) > 1 and parts[1].isdigit():
+            if 16 <= int(parts[1]) <= 31:
+                return None
+    return jsonify({"error": "Access restricted to local network"}), 403
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -107,8 +94,6 @@ def serve_spa(path):
 
 @app.after_request
 def force_mimetypes(response):
-    if getattr(g, 'set_auth_cookie', False):
-        response.set_cookie('plex_session', get_auth_hash(), max_age=10*365*24*60*60, httponly=True)
 
     if request.path.endswith('.js'):
         response.content_type = 'application/javascript'
@@ -261,7 +246,7 @@ def setup_tray():
         os._exit(0)
     
     icon = pystray.Icon("PlexTracker", create_image(), "PlexTracker Web Server", menu=pystray.Menu(
-        pystray.MenuItem("Open Dashboard", lambda: os.system("start http://plexauth.cc")),
+        pystray.MenuItem("Open Dashboard", lambda: os.system("start http://localhost:5000")),
         pystray.MenuItem("Quit", quit_action)
     ))
     return icon
@@ -275,10 +260,10 @@ if __name__ == '__main__':
         sys.stdout = open(os.devnull, 'w')
         sys.stderr = open(os.devnull, 'w')
 
-    print("Serving PlexTracker on http://plexauth.cc (Port 80). Check System Tray.")
+    print("Serving PlexTracker on http://localhost:5000 (Port 5000). Check System Tray.")
     import logging
     logging.getLogger('waitress').setLevel(logging.ERROR) # Mute innocuous queue warnings
-    server_thread = threading.Thread(target=serve, args=(app,), kwargs={'host': '0.0.0.0', 'port': 80, 'threads': 16}, daemon=True)
+    server_thread = threading.Thread(target=serve, args=(app,), kwargs={'host': '0.0.0.0', 'port': 5000, 'threads': 16}, daemon=True)
     server_thread.start()
     
     icon = setup_tray()

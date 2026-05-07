@@ -1,3 +1,5 @@
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+strPath = objFSO.GetParentFolderName(WScript.ScriptFullName)
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = "C:\Games\Agents\plex_aither_automation"
-WshShell.Run "python app.py", 0, False
+WshShell.CurrentDirectory = strPath
+WshShell.Run "pythonw app.py", 0, False
