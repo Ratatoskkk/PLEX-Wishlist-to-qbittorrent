@@ -22,7 +22,10 @@ This project uses a **decoupled hybrid architecture**:
 - **Approval/Deny UI** — Approve or deny individual torrents or entire season packs from the web dashboard.
 - **Single-Instance Lock** — Prevents duplicate background daemons from spawning when `run.bat` is clicked multiple times.
 - **Headless System Tray** — Runs entirely in the background via a Windows System Tray icon.
-- **Basic Authentication** — The web dashboard and API are protected by credentials configured in your `.env` file.
+- **Automated TV Tracking (TMDB)** — Connects to TMDB to predict when your ongoing shows will air, and automatically polls the tracker exactly 24 hours after release.
+- **LAN-Only Security** — Replaced clunky basic authentication with a transparent IP whitelist. Access the dashboard instantly from any device on your local network, while blocking external traffic.
+- **Highly Optimized** — Uses in-memory API caching and flat queries to eliminate redundant network calls, making the background polling lightning fast.
+- **Performance Monitor** — Includes an optional `monitor_performance.py` script to log CPU and RAM usage over time.
 
 ## Setup
 
@@ -54,14 +57,16 @@ cd ..
 PLEX_URL=http://your-plex-server:32400
 PLEX_TOKEN=your_plex_token
 AITHER_API_KEY=your_aither_api_key
+TMDB_API_KEY=your_tmdb_api_key
 QBITTORRENT_URL=http://localhost:8080
 QBITTORRENT_USERNAME=admin
 QBITTORRENT_PASSWORD=password
 DOWNLOAD_DIR_1=E:\Torrent
 DOWNLOAD_DIR_2=D:\Torrent
-WEB_USERNAME=admin
-WEB_PASSWORD=choose_a_strong_password
 ```
+
+> Find your Plex token via [this guide](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
+> You can get a TMDB API Key from [TMDB Developer API](https://developer.themoviedb.org/docs/getting-started).
 
 > Find your Plex token via [this guide](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/).
 
@@ -100,12 +105,15 @@ run.bat
 
 ```
 plex_aither_automation/
-├── app.py              # Flask REST API + SPA host (with Basic Auth)
-├── scheduler.py        # APScheduler jobs (watchlist + download monitor)
-├── downloader.py       # Aither API search + qBittorrent integration
-├── database.py         # SQLite history with progress/ETA tracking
+├── app.py              # Flask REST API + SPA host (with LAN IP restriction)
+├── scheduler.py        # APScheduler jobs (watchlist + download monitor + TMDB poll)
+├── downloader.py       # Aither API search + TMDB fetch + qBittorrent integration
+├── database.py         # SQLite history with progress and tracked episodes
 ├── tray.py             # Windows system tray daemon
 ├── run.bat             # Launch script
+├── start_hidden.vbs    # Headless dynamic launch script
+├── monitor_performance.py # Optional CPU/RAM tracking script
+├── sync_library.py     # Initial setup script to import existing Plex shows
 ├── .env                # Your credentials (not committed)
 ├── .env.example        # Template for your credentials
 ├── frontend/
