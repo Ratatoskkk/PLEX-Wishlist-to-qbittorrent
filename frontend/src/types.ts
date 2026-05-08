@@ -15,6 +15,19 @@ export interface Download {
   resolution: string;
   progress: number;
   eta_seconds: number;
+  poster_path: string | null;
+}
+
+export interface TrackedEpisode {
+  id: number;
+  tmdb_id: string;
+  show_title: string;
+  season_num: number;
+  episode_num: number;
+  air_date: string;
+  status: 'waiting' | 'polling' | 'downloaded' | 'give_up' | 'ignored';
+  poster_path: string | null;
+  media_type: 'episode' | 'movie';
 }
 
 export interface ProgressUpdate {
@@ -27,6 +40,7 @@ export interface AppState {
   downloads: Download[];
   pending_groups: Record<string, Download[]>;
   pending_count: number;
+  upcoming: TrackedEpisode[];
   last_check: string;
   last_error: string | null;
 }

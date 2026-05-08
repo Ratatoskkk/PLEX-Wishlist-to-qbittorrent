@@ -11,6 +11,7 @@ class DownloadParams(TypedDict):
     aither_torrent_id: str
     download_link: Optional[str]
     resolution: Optional[str]
+    poster_path: Optional[str]
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'history.db')
 
@@ -56,14 +57,28 @@ def init_db():
         ''')
         # Initialize status row
         db.execute('INSERT OR IGNORE INTO system_status (id, last_checked) VALUES (1, NULL)')
+
+        # Migrations
+        cursor = db.execute("PRAGMA table_info(downloads)")
+        columns = [row['name'] for row in cursor.fetchall()]
+        if 'poster_path' not in columns:
+            db.execute("ALTER TABLE downloads ADD COLUMN poster_path TEXT")
+
+        cursor = db.execute("PRAGMA table_info(tracked_episodes)")
+        columns = [row['name'] for row in cursor.fetchall()]
+        if 'poster_path' not in columns:
+            db.execute("ALTER TABLE tracked_episodes ADD COLUMN poster_path TEXT")
+        if 'media_type' not in columns:
+            db.execute("ALTER TABLE tracked_episodes ADD COLUMN media_type TEXT DEFAULT 'episode'")
+
         db.commit()
 
 def record_download(params: DownloadParams):
     with get_db() as db:
         cursor = db.execute('''
-            INSERT INTO downloads (title, tmdb_id, file_size_bytes, status, aither_torrent_id, download_link, resolution)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (params['title'], params.get('tmdb_id'), params['file_size_bytes'], params['status'], params['aither_torrent_id'], params.get('download_link'), params.get('resolution', 'Unknown')))
+            INSERT INTO downloads (title, tmdb_id, file_size_bytes, status, aither_torrent_id, download_link, resolution, poster_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (params['title'], params.get('tmdb_id'), params['file_size_bytes'], params['status'], params['aither_torrent_id'], params.get('download_link'), params.get('resolution', 'Unknown'), params.get('poster_path')))
         db.commit()
         return cursor.lastrowid
 
@@ -119,21 +134,26 @@ def is_already_recorded(aither_torrent_id):
         ).fetchone()
         return row is not None
 
-def add_tracked_episode(tmdb_id: str, show_title: str, season_num: int, episode_num: int, air_date_str: str):
+def add_tracked_episode(tmdb_id: str, show_title: str, season_num: int, episode_num: int, air_date_str: str, poster_path: Optional[str] = None, media_type: str = 'episode', status: str = 'waiting'):
     with get_db() as db:
+        # For movies, there's only 1 item per tmdb_id usually, but let's check exact match
         existing = db.execute('SELECT id FROM tracked_episodes WHERE tmdb_id = ? AND season_num = ? AND episode_num = ?', 
                               (tmdb_id, season_num, episode_num)).fetchone()
         if existing:
             return
         db.execute('''
-            INSERT INTO tracked_episodes (tmdb_id, show_title, season_num, episode_num, air_date, status)
-            VALUES (?, ?, ?, ?, ?, 'waiting')
-        ''', (tmdb_id, show_title, season_num, episode_num, air_date_str))
+            INSERT INTO tracked_episodes (tmdb_id, show_title, season_num, episode_num, air_date, status, poster_path, media_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (tmdb_id, show_title, season_num, episode_num, air_date_str, status, poster_path, media_type))
         db.commit()
 
 def get_episodes_by_status(status: str):
     with get_db() as db:
         return db.execute('SELECT * FROM tracked_episodes WHERE status = ?', (status,)).fetchall()
+
+def get_upcoming_episodes():
+    with get_db() as db:
+        return db.execute("SELECT * FROM tracked_episodes WHERE status IN ('waiting', 'polling', 'ignored')").fetchall()
 
 def update_tracked_episode_status(ep_id: int, status: str):
     with get_db() as db:

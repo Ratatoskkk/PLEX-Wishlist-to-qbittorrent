@@ -7,7 +7,7 @@
     downloads: Download[];
     liveProgress: Record<string, ProgressUpdate>;
   }
-  let { downloads, liveProgress } = $props<Props>();
+  let { downloads, liveProgress }: Props = $props();
 
   // Smoothed values driven by rAF — plain object, not reactive (avoids batching lag)
   const targets: Record<string, number> = {};
@@ -104,10 +104,15 @@
           <tr class:downloading={dl.status === 'downloading'}>
             <td>
               <div class="title-cell">
-                <span class="title-text">{dl.title}</span>
-                {#if dl.resolution && dl.resolution !== 'Unknown'}
-                  <span class="res-badge">{dl.resolution}</span>
+                {#if dl.poster_path}
+                  <img src="https://image.tmdb.org/t/p/w92{dl.poster_path}" alt="poster" class="list-poster" loading="lazy" />
                 {/if}
+                <div class="title-info">
+                  <span class="title-text">{dl.title}</span>
+                  {#if dl.resolution && dl.resolution !== 'Unknown'}
+                    <span class="res-badge">{dl.resolution}</span>
+                  {/if}
+                </div>
               </div>
             </td>
             <td>
@@ -207,8 +212,24 @@
   .title-cell {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     flex-wrap: wrap;
+
+    .list-poster {
+      width: 40px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: var(--surface-500);
+      flex-shrink: 0;
+    }
+
+    .title-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      justify-content: center;
+    }
 
     .title-text { 
       font-family: var(--font-display);
@@ -216,6 +237,7 @@
       font-size: 16px;
     }
     .res-badge {
+      align-self: flex-start;
       font-family: var(--font-code);
       font-size: 11px;
       padding: 3px 8px;

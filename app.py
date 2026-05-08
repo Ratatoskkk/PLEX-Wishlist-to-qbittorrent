@@ -128,10 +128,14 @@ def get_state():
              pending_groups[root] = []
         pending_groups[root].append(dict(p))
              
+    upcoming = [dict(ep) for ep in database.get_upcoming_episodes()]
+    upcoming.sort(key=lambda x: x['air_date'] if x['air_date'] else "9999-99-99")
+
     return jsonify({
         'downloads': [dict(d) for d in downloads],
         'pending_groups': pending_groups,
         'pending_count': len(pending),
+        'upcoming': upcoming,
         'last_check': last_check_str,
         'last_error': system_status['last_error'] if system_status else None
     })
@@ -224,6 +228,32 @@ def deny_group(title):
         db.execute("UPDATE downloads SET status = 'denied' WHERE status = 'pending_approval' AND title LIKE ?", (f"{decoded_title} (%",))
         db.commit()
     return jsonify({"success": True})
+
+@app.route('/api/tracked_episode/<int:ep_id>/toggle', methods=['POST'])
+def toggle_tracked_episode(ep_id):
+    with database.get_db() as db:
+        ep = db.execute('SELECT * FROM tracked_episodes WHERE id = ?', (ep_id,)).fetchone()
+        if not ep:
+            return jsonify({"success": False, "error": "Not found"}), 404
+            
+        tmdb_id = ep['tmdb_id']
+        show_title = ep['show_title']
+        
+        if ep['status'] == 'ignored':
+            new_status = 'polling'
+            db.execute("UPDATE tracked_episodes SET status = 'waiting' WHERE tmdb_id = ? AND status = 'ignored'", (tmdb_id,))
+            db.execute("UPDATE tracked_episodes SET status = 'polling' WHERE tmdb_id = ? AND status = 'waiting' AND datetime(air_date) <= datetime('now')", (tmdb_id,))
+            db.commit()
+            print(f"[*] All tracked items for '{show_title}' set to Auto Download.")
+            import threading
+            threading.Thread(target=scheduler.poll_tracked_episodes, daemon=True).start()
+        else:
+            new_status = 'ignored'
+            db.execute("UPDATE tracked_episodes SET status = 'ignored' WHERE tmdb_id = ? AND status IN ('waiting', 'polling')", (tmdb_id,))
+            db.commit()
+            print(f"[*] All tracked items for '{show_title}' set to DO NOT DOWNLOAD.")
+            
+    return jsonify({"success": True, "new_status": new_status})
 
 @app.route('/api/clear', methods=['POST'])
 def clear_history():

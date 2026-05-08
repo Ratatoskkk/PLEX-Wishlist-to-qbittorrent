@@ -245,6 +245,20 @@ def fetch_tmdb_tv_details(tmdb_id: str) -> Optional[Dict[str, Any]]:
         print(f"Error fetching TMDB for {tmdb_id}: {e}")
         return None
 
+@functools.lru_cache(maxsize=64)
+def fetch_tmdb_movie_release_dates(tmdb_id: str) -> Optional[Dict[str, Any]]:
+    tmdb_key = os.getenv('TMDB_API_KEY')
+    if not tmdb_key:
+        return None
+    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}?api_key={tmdb_key}&append_to_response=release_dates"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Error fetching TMDB movie dates for {tmdb_id}: {e}")
+        return None
+
 def normalize_title(title: str) -> List[str]:
     # Convert 'Season X' to 'S0X' for scene torrent matching
     title = RE_SEASON.sub(lambda m: f"S{int(m.group(1)):02d}", title)

@@ -22,7 +22,7 @@ This project uses a **decoupled hybrid architecture**:
 - **Approval/Deny UI** — Approve or deny individual torrents or entire season packs from the web dashboard.
 - **Single-Instance Lock** — Prevents duplicate background daemons from spawning when `run.bat` is clicked multiple times.
 - **Headless System Tray** — Runs entirely in the background via a Windows System Tray icon.
-- **Automated TV Tracking (TMDB)** — Connects to TMDB to predict when your ongoing shows will air, and automatically polls the tracker exactly 24 hours after release.
+- **Automated TV & Movie Tracking (TMDB)** — Connects to TMDB to predict when your ongoing shows will air or unreleased movies will drop on Blu-ray/VOD. Automatically polls the tracker until a release is found!
 - **LAN-Only Security** — Replaced clunky basic authentication with a transparent IP whitelist. Access the dashboard instantly from any device on your local network, while blocking external traffic.
 - **Highly Optimized** — Uses in-memory API caching and flat queries to eliminate redundant network calls, making the background polling lightning fast.
 - **Performance Monitor** — Includes an optional `monitor_performance.py` script to log CPU and RAM usage over time.

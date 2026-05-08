@@ -3,17 +3,19 @@
   import type { AppState, ProgressUpdate } from '../types';
   import PendingCard from '../components/PendingCard.svelte';
   import HistoryList from '../components/HistoryList.svelte';
+  import UpcomingSidebar from '../components/UpcomingSidebar.svelte';
 
-  let state = $state({
+  let state: AppState = $state({
     downloads: [],
     pending_groups: {},
     pending_count: 0,
+    upcoming: [],
     last_check: 'Loading...',
     last_error: null
-  } as AppState);
+  });
 
   // SSE live progress: keyed by download id (as string)
-  let liveProgress = $state<Record<string, ProgressUpdate>>({});
+  let liveProgress: Record<string, ProgressUpdate> = $state({});
 
   let pollInterval: ReturnType<typeof setInterval>;
   let eventSource: EventSource | null = null;
@@ -63,7 +65,10 @@
   }
 </script>
 
-<div class="dashboard">
+<div class="app-layout">
+  <UpcomingSidebar upcoming={state.upcoming || []} onAction={fetchState} />
+  
+  <div class="dashboard">
   <section class="status-bar cursor-card">
     <div class="logo-container">
       <img src="/logo.png" alt="PlexAither Tracker Logo" class="logo" />
@@ -109,10 +114,19 @@
     </div>
     <HistoryList downloads={state.downloads} {liveProgress} />
   </section>
+  </div>
 </div>
 
 <style lang="scss">
+  .app-layout {
+    display: flex;
+    gap: 3rem;
+    align-items: flex-start;
+  }
+
   .dashboard {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 3rem; /* Expanded gap */

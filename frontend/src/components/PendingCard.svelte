@@ -7,7 +7,7 @@
     items: Download[];
     onAction: () => void;
   }
-  let { title, items, onAction } = $props<Props>();
+  let { title, items, onAction }: Props = $props();
 
   async function groupAction(path: string) {
     await fetch(path + '/' + encodeURIComponent(title), { method: 'POST' });
@@ -35,10 +35,15 @@
     {#each items as item}
       <div class="item-row">
         <div class="item-info">
-          <span class="item-title">{item.title}</span>
-          <div class="item-meta">
-            <span class="badge size">{formatSize(item.file_size_bytes)}</span>
-            <span class="badge res">{item.resolution}</span>
+          {#if item.poster_path}
+            <img src="https://image.tmdb.org/t/p/w92{item.poster_path}" alt="poster" class="list-poster" loading="lazy" />
+          {/if}
+          <div class="title-group">
+            <span class="item-title">{item.title}</span>
+            <div class="item-meta">
+              <span class="badge size">{formatSize(item.file_size_bytes)}</span>
+              <span class="badge res">{item.resolution}</span>
+            </div>
           </div>
         </div>
         <div class="item-actions">
@@ -95,11 +100,27 @@
   
   .item-info {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    gap: 16px;
+    align-items: center;
     
+    .list-poster {
+      width: 48px;
+      height: 72px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: var(--surface-500);
+      flex-shrink: 0;
+    }
+
+    .title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      justify-content: center;
+    }
+
     .item-title { 
-      font-weight: 400; 
+      font-weight: 500; 
       font-size: 16px; 
     }
     
