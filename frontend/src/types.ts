@@ -16,6 +16,8 @@ export interface Download {
   progress: number;
   eta_seconds: number;
   poster_path: string | null;
+  save_path: string | null;
+  watched: number;
 }
 
 export interface TrackedEpisode {
@@ -28,6 +30,16 @@ export interface TrackedEpisode {
   status: 'waiting' | 'polling' | 'downloaded' | 'give_up' | 'ignored';
   poster_path: string | null;
   media_type: 'episode' | 'movie';
+}
+
+export interface CleanupItem {
+  id: number;
+  title: string;
+  poster_path: string | null;
+  file_size_bytes: number;
+  save_path: string;
+  drive_label: string;
+  resolution: string;
 }
 
 export interface ProgressUpdate {

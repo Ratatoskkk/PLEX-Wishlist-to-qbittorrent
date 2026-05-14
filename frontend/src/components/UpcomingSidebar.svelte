@@ -8,6 +8,24 @@
   }
   let { upcoming, onAction }: Props = $props();
 
+  type SortKey = 'date' | 'name';
+  let sortKey: SortKey = $state('date');
+
+  const sorted = $derived((() => {
+    const copy = [...upcoming];
+    if (sortKey === 'date') {
+      // air_date ascending: aired (past) first, then soonest future, nulls last
+      copy.sort((a, b) => {
+        const da = a.air_date || '9999-99-99';
+        const db = b.air_date || '9999-99-99';
+        return da.localeCompare(db);
+      });
+    } else {
+      copy.sort((a, b) => a.show_title.localeCompare(b.show_title));
+    }
+    return copy;
+  })());
+
   let now = $state(new Date().getTime());
   let rafId: number;
 
@@ -59,9 +77,23 @@
 <div class="sidebar cursor-card">
   <div class="header">
     <h2>Upcoming Episodes</h2>
+    <div class="sort-pills">
+      <button
+        class="sort-pill"
+        class:active={sortKey === 'date'}
+        onclick={() => { sortKey = 'date'; }}
+        id="upcoming-sort-date"
+      >Date</button>
+      <button
+        class="sort-pill"
+        class:active={sortKey === 'name'}
+        onclick={() => { sortKey = 'name'; }}
+        id="upcoming-sort-name"
+      >Name</button>
+    </div>
   </div>
   <div class="episode-list">
-    {#each upcoming as ep}
+    {#each sorted as ep (ep.id)}
       <div class="episode-card" class:ignored={ep.status === 'ignored'}>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -110,11 +142,45 @@
     padding: 20px 24px;
     border-bottom: 1px solid var(--border-primary);
     background: var(--surface-300);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     h2 { 
       margin: 0; 
       font-size: 18px; 
       font-weight: 400; 
       letter-spacing: -0.11px;
+      white-space: nowrap;
+    }
+  }
+
+  .sort-pills {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .sort-pill {
+    background: var(--surface-500);
+    color: var(--border-strong);
+    border: 1px solid var(--border-primary);
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-family: var(--font-system);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    &.active {
+      background: var(--color-accent);
+      color: white;
+      border-color: transparent;
+    }
+
+    &:hover:not(.active) {
+      color: var(--cursor-dark);
     }
   }
 

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import type { AppState, ProgressUpdate } from '../types';
+  import type { AppState, ProgressUpdate, CleanupItem } from '../types';
   import PendingCard from '../components/PendingCard.svelte';
   import HistoryList from '../components/HistoryList.svelte';
   import UpcomingSidebar from '../components/UpcomingSidebar.svelte';
+  import CleanupSidebar from '../components/CleanupSidebar.svelte';
 
   let state: AppState = $state({
     downloads: [],
@@ -14,10 +15,13 @@
     last_error: null
   });
 
+  let cleanupItems: CleanupItem[] = $state([]);
+
   // SSE live progress: keyed by download id (as string)
   let liveProgress: Record<string, ProgressUpdate> = $state({});
 
   let pollInterval: ReturnType<typeof setInterval>;
+  let cleanupInterval: ReturnType<typeof setInterval>;
   let eventSource: EventSource | null = null;
 
   async function fetchState() {
@@ -28,6 +32,17 @@
       }
     } catch (err) {
       console.error('Failed to fetch state:', err);
+    }
+  }
+
+  async function fetchCleanup() {
+    try {
+      const res = await fetch('/api/cleanup');
+      if (res.ok) {
+        cleanupItems = await res.json();
+      }
+    } catch (err) {
+      console.error('Failed to fetch cleanup:', err);
     }
   }
 
@@ -50,23 +65,49 @@
 
   onMount(() => {
     fetchState();
+    fetchCleanup();
     pollInterval = setInterval(fetchState, 5000);
+    cleanupInterval = setInterval(fetchCleanup, 30000);
     connectStream();
   });
 
   onDestroy(() => {
     clearInterval(pollInterval);
+    clearInterval(cleanupInterval);
     eventSource?.close();
   });
+
+  let isPolling = $state(false);
 
   async function clearHistory() {
     await fetch('/api/clear', { method: 'POST' });
     fetchState();
   }
+
+  async function triggerPollNow() {
+    isPolling = true;
+    try {
+      await fetch('/api/poll_now', { method: 'POST' });
+      // Give the backend a moment to start, then refresh state
+      setTimeout(fetchState, 2000);
+    } catch (err) {
+      console.error('Poll trigger failed:', err);
+    } finally {
+      setTimeout(() => { isPolling = false; }, 3000);
+    }
+  }
+
+  async function handleCleanupDelete() {
+    await fetchCleanup();
+    await fetchState();
+  }
 </script>
 
 <div class="app-layout">
-  <UpcomingSidebar upcoming={state.upcoming || []} onAction={fetchState} />
+  <div class="left-column">
+    <UpcomingSidebar upcoming={state.upcoming || []} onAction={fetchState} />
+    <CleanupSidebar items={cleanupItems} onAction={handleCleanupDelete} />
+  </div>
   
   <div class="dashboard">
   <section class="status-bar cursor-card">
@@ -90,6 +131,13 @@
           <span class="value">{state.last_error}</span>
         </div>
       {/if}
+      <button class="check-now" onclick={triggerPollNow} disabled={isPolling}>
+        {#if isPolling}
+          <span class="spinner"></span> Checking…
+        {:else}
+          ⟳ Check Now
+        {/if}
+      </button>
     </div>
   </section>
 
@@ -122,6 +170,23 @@
     display: flex;
     gap: 3rem;
     align-items: flex-start;
+  }
+
+  .left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    flex-shrink: 0;
+    width: 340px;
+    // Stick to top while scrolling
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+
+    // Hide scrollbar visually but keep it functional
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
   }
 
   .dashboard {
@@ -227,5 +292,45 @@
   .history-section {
     padding: 0;
     overflow: hidden;
+  }
+
+  .check-now {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    background: var(--surface-300);
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    white-space: nowrap;
+
+    &:hover:not(:disabled) {
+      background: var(--surface-500);
+      border-color: var(--border-strong);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border-primary);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>
