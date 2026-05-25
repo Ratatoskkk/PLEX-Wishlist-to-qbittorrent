@@ -234,14 +234,6 @@ def get_fresh_polling_episodes(days: int = 7):
             (f'-{days} days',),
         ).fetchall()
 
-def get_stale_polling_episodes(days: int = 7):
-    """Return 'polling' episodes whose air_date is older than N days (long-tail)."""
-    with get_db() as db:
-        return db.execute(
-            "SELECT * FROM tracked_episodes WHERE status = 'polling' AND air_date < date('now', ?)",
-            (f'-{days} days',),
-        ).fetchall()
-
 def get_upcoming_episodes():
     with get_db() as db:
         return db.execute(

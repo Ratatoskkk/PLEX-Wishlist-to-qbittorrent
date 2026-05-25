@@ -78,15 +78,27 @@ A system tray icon will appear in the bottom-right of your taskbar. Right-click 
 - **Open Dashboard** → `http://localhost:5000`
 - **Quit**
 
-## Dashboard
+## Dashboard & UX Layout Overhaul 🎨
 
-The web UI at `http://localhost:5000` shows:
+The user interface has been completely modernized with a responsive, premium glassmorphism theme using the entire screen instead of being boxed in.
+
+- **Full-Screen Responsive Layout** — Spans the full browser width and scales dynamically down to mobile devices, optimizing screen space on any resolution.
+- **Side-by-Side Scrolling Dashboard** — Major sections like "Requires Approval" (when active) and "Active & History" sit side-by-side on wide screens.
+- **Independent Scroll Containers** — Long lists are contained in individually scrollable panels to prevent vertical page bloat and maintain absolute control.
+- **Micro-Animations & RAF Smoothing** — Real-time download progress meters interpolate smoothly using a `requestAnimationFrame` render loop, avoiding double-animations and layout jank.
+- **Dedicated Countdowns** — Upcoming tracker/TMDB episodes display highly-efficient, consolidated timers updated every second.
+
+## Dashboard Sections
+
+The web UI at `http://localhost:5000` features:
 
 | Section | Description |
 |---|---|
-| **Status Bar** | Last scheduler check time and any errors |
-| **Requires Approval** | Pending large files or season packs needing manual action |
-| **Active & History** | All downloads with status, progress %, ETA, and date added |
+| **Status Bar** | Last scheduler check time and active status indicator |
+| **Requires Approval** | Gated large files or multi-season show packs requiring manual action |
+| **Active & History** | Comprehensive view of active torrents (downloading, queued, paused) alongside historic database logs |
+| **Cleanup Manager** | One-click triggers for disk cache sweeps, stale tracker deletions, and storage optimization |
+| **Upcoming Watchlist** | Direct insight into TMDB-synchronized television and movie air dates being polled |
 
 ## Rebuilding the Frontend
 

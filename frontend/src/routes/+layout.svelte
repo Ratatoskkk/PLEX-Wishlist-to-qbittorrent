@@ -13,12 +13,12 @@
 
 <style lang="scss">
   .app-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 3rem 2rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 3rem;
+    min-height: 100vh;
   }
   
 </style>

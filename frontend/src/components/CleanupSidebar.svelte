@@ -10,6 +10,20 @@
 
   type SortKey = 'size' | 'drive';
   let sortKey: SortKey = $state('size');
+  let isScanning: boolean = $state(false);
+
+  async function scanNow() {
+    isScanning = true;
+    try {
+      await fetch('/api/cleanup/scan', { method: 'POST' });
+      // Give the background scan a moment, then refresh
+      setTimeout(onAction, 3000);
+    } catch (err) {
+      console.error('Cleanup scan failed:', err);
+    } finally {
+      setTimeout(() => { isScanning = false; }, 3000);
+    }
+  }
 
   // Track which item is in "confirm" state
   let confirmingId: number | null = $state(null);
@@ -54,19 +68,34 @@
 <div class="sidebar cursor-card">
   <div class="header">
     <h2>Clean Up</h2>
-    <div class="sort-pills">
+    <div class="header-controls">
       <button
-        class="sort-pill"
-        class:active={sortKey === 'size'}
-        onclick={() => { sortKey = 'size'; }}
-        id="cleanup-sort-size"
-      >Size</button>
-      <button
-        class="sort-pill"
-        class:active={sortKey === 'drive'}
-        onclick={() => { sortKey = 'drive'; }}
-        id="cleanup-sort-drive"
-      >Drive</button>
+        class="scan-btn"
+        onclick={scanNow}
+        disabled={isScanning}
+        id="cleanup-scan-now"
+        title="Re-check Plex for watched items"
+      >
+        {#if isScanning}
+          <span class="spin"></span>
+        {:else}
+          ⟳
+        {/if}
+      </button>
+      <div class="sort-pills">
+        <button
+          class="sort-pill"
+          class:active={sortKey === 'size'}
+          onclick={() => { sortKey = 'size'; }}
+          id="cleanup-sort-size"
+        >Size</button>
+        <button
+          class="sort-pill"
+          class:active={sortKey === 'drive'}
+          onclick={() => { sortKey = 'drive'; }}
+          id="cleanup-sort-drive"
+        >Drive</button>
+      </div>
     </div>
   </div>
 
@@ -139,11 +168,9 @@
 
 <style lang="scss">
   .sidebar {
-    width: 340px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    flex-shrink: 0;
   }
 
   .header {
@@ -162,6 +189,53 @@
       letter-spacing: -0.11px;
       white-space: nowrap;
     }
+  }
+
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .scan-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    background: var(--surface-500);
+    color: var(--border-strong);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+
+    &:hover:not(:disabled) {
+      background: var(--surface-400);
+      color: var(--cursor-dark);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  .spin {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--border-primary);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .sort-pills {

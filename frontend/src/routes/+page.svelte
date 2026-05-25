@@ -106,7 +106,6 @@
 <div class="app-layout">
   <div class="left-column">
     <UpcomingSidebar upcoming={state.upcoming || []} onAction={fetchState} />
-    <CleanupSidebar items={cleanupItems} onAction={handleCleanupDelete} />
   </div>
   
   <div class="dashboard">
@@ -141,60 +140,107 @@
     </div>
   </section>
 
-  {#if state.pending_count > 0}
-    <section class="pending-section">
-      <div class="section-header">
-        <h2>Requires Approval ({state.pending_count})</h2>
-        <p class="subtitle">These items exceed the size threshold or are part of a multi-season pack.</p>
-      </div>
-      <div class="pending-grid">
-        {#each Object.entries(state.pending_groups) as [rootTitle, items]}
-          <PendingCard title={rootTitle} {items} onAction={fetchState} />
-        {/each}
-      </div>
-    </section>
-  {/if}
+  <div class="dashboard-split">
+    {#if state.pending_count > 0}
+      <section class="pending-section">
+        <div class="pending-grid">
+          {#each Object.entries(state.pending_groups) as [rootTitle, items]}
+            <PendingCard title={rootTitle} {items} onAction={fetchState} />
+          {/each}
+        </div>
+      </section>
+    {/if}
 
-  <section class="history-section cursor-card">
-    <div class="section-header flat">
-      <h2>Active &amp; History</h2>
-      <button class="danger" onclick={clearHistory}>Clear Completed</button>
-    </div>
-    <HistoryList downloads={state.downloads} {liveProgress} />
-  </section>
+    <section class="history-section cursor-card">
+      <div class="section-header flat">
+        <h2>Active &amp; History</h2>
+        <button class="danger" onclick={clearHistory}>Clear Completed</button>
+      </div>
+      <HistoryList downloads={state.downloads} {liveProgress} />
+    </section>
+  </div>
+  </div>
+
+  <div class="right-column">
+    <CleanupSidebar items={cleanupItems} onAction={handleCleanupDelete} />
   </div>
 </div>
 
 <style lang="scss">
   .app-layout {
     display: flex;
-    gap: 3rem;
-    align-items: flex-start;
+    flex-direction: row;
+    gap: 2rem;
+    align-items: stretch;
+    height: 100vh;
+    padding: 2rem;
+    box-sizing: border-box;
+    overflow: hidden;
+
+    @media (max-width: 1200px) {
+      flex-direction: column;
+      height: auto;
+      overflow: visible;
+      padding: 1rem;
+      gap: 1.5rem;
+    }
   }
 
   .left-column {
     display: flex;
     flex-direction: column;
     gap: 2rem;
-    flex-shrink: 0;
-    width: 340px;
-    // Stick to top while scrolling
-    position: sticky;
-    top: 0;
-    max-height: 100vh;
+    flex: 0 0 340px;
+    min-height: 0;
+    height: 100%;
     overflow-y: auto;
 
-    // Hide scrollbar visually but keep it functional
-    scrollbar-width: none;
-    &::-webkit-scrollbar { display: none; }
+    @media (max-width: 1200px) {
+      flex: none;
+      width: 100%;
+      height: auto;
+      max-height: 60vh;
+    }
+  }
+
+  .right-column {
+    flex: 0 0 340px;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+
+    @media (max-width: 1200px) {
+      flex: none;
+      width: 100%;
+      height: auto;
+      max-height: 60vh;
+    }
   }
 
   .dashboard {
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 3rem; /* Expanded gap */
+    gap: 2rem;
+    height: 100%;
+  }
+
+  .dashboard-split {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .pending-section {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
 
   .status-bar {
@@ -202,6 +248,8 @@
     padding: 16px 24px;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
 
     .logo-container {
       display: flex;
@@ -209,7 +257,7 @@
     }
 
     .logo {
-      height: 96px; /* Rendered bigger */
+      height: 96px; 
       width: auto;
     }
 
@@ -217,6 +265,7 @@
       display: flex;
       align-items: center;
       gap: 2rem;
+      flex-wrap: wrap;
     }
 
     .status-item {
@@ -257,41 +306,31 @@
   }
 
   .section-header {
-    margin-bottom: 1.5rem;
-
-    h2 { 
-      margin: 0 0 8px 0; 
-      font-size: 26px; 
-      letter-spacing: -0.325px; 
-    }
-    
-    .subtitle { 
-      margin: 0; 
-      color: var(--border-strong); 
-      font-family: var(--font-body);
-      font-size: 17.28px; 
-    }
-
     &.flat {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 0;
       padding: 24px;
       border-bottom: 1px solid var(--border-primary);
-      h2 { margin: 0; }
+      flex-wrap: wrap;
+      gap: 1rem;
+      h2 { margin: 0; font-size: 26px; letter-spacing: -0.325px; }
     }
   }
 
   .pending-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 24px;
   }
 
   .history-section {
+    flex: 1;
+    min-height: 0;
     padding: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
 
   .check-now {
@@ -302,7 +341,7 @@
     border: 1px solid var(--border-primary);
     border-radius: 8px;
     background: var(--surface-300);
-    color: var(--color-text);
+    color: var(--cursor-dark);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;

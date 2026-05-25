@@ -1,31 +1,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,400;0,600;0,700;1,400&family=Fira+Code&display=swap');
 
 :root {
-  /* Cursor Dark Mode Palette */
-  --cursor-dark: #f2f1ed;  /* inverted for text */
-  --cursor-cream: #1a1914; /* inverted */
-  
-  --surface-100: #151410;
+  --cursor-dark: #f2f1ed;
+
   --surface-200: #1e1d17;
   --surface-300: #292820;
   --surface-400: #36342a;
   --surface-500: #424033;
-  
+
   --color-accent: #f54e00;
   --color-error: #cf2d56;
   --color-success: #1f8a65;
-  
-  /* Fallbacks for Oklab where supported */
+
   --border-primary: rgba(242, 241, 237, 0.1);
-  --border-medium: rgba(242, 241, 237, 0.25);
   --border-strong: rgba(242, 241, 237, 0.45);
 
-  --shadow-ambient: rgba(0,0,0,0.3) 0px 0px 16px, rgba(0,0,0,0.15) 0px 0px 8px;
   --shadow-card: rgba(0,0,0,0.6) 0px 28px 70px, rgba(0,0,0,0.4) 0px 14px 32px, var(--border-primary) 0px 0px 0px 1px;
-  
-  /* Fonts - using smooth Lato */
-  --font-display: 'Lato', system-ui, Helvetica Neue, Helvetica, Arial; 
-  --font-body: 'Lato', system-ui, Helvetica Neue, Helvetica, Arial; 
+
+  --font-display: 'Lato', system-ui, Helvetica Neue, Helvetica, Arial;
+  --font-body: 'Lato', system-ui, Helvetica Neue, Helvetica, Arial;
   --font-code: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Courier New;
   --font-system: system-ui, -apple-system, Segoe UI, Helvetica Neue, Arial;
 }
@@ -33,7 +26,6 @@
 @supports (border-color: oklab(0 0 0)) {
   :root {
     --border-primary: oklab(0.95 0 0 / 0.1);
-    --border-medium: oklab(0.95 0 0 / 0.25);
   }
 }
 
@@ -77,49 +69,7 @@ button {
   font-weight: 400;
   transition: all 0.15s ease;
   outline: none;
-  
-  &.primary {
-    background: var(--surface-300);
-    color: var(--cursor-dark);
-    padding: 10px 14px;
-    border-radius: 8px;
-    font-size: 14px;
-    
-    &:hover { 
-      color: var(--color-error);
-    }
-    &:focus {
-      box-shadow: rgba(0,0,0,0.1) 0px 4px 12px;
-    }
-  }
-  
-  &.pill {
-    background: var(--surface-400);
-    color: var(--border-strong);
-    padding: 3px 10px;
-    border-radius: 9999px;
-    font-size: 13px;
-    font-family: var(--font-system);
-    font-weight: 500;
-    
-    &:hover { 
-      color: var(--color-error);
-    }
-  }
 
-  &.ghost {
-    background: rgba(38, 37, 30, 0.06);
-    color: var(--border-strong);
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 14px;
-
-    &:hover {
-      color: var(--color-error);
-    }
-  }
-  
-  /* Semantic state buttons */
   &.success {
     background: rgba(31, 138, 101, 0.1);
     color: var(--color-success);
@@ -131,7 +81,7 @@ button {
 
     &:hover { background: rgba(31, 138, 101, 0.15); }
   }
-  
+
   &.danger {
     background: rgba(207, 45, 86, 0.1);
     color: var(--color-error);
@@ -143,8 +93,4 @@ button {
 
     &:hover { background: rgba(207, 45, 86, 0.15); }
   }
-}
-
-.mono-text {
-  font-family: var(--font-code);
 }

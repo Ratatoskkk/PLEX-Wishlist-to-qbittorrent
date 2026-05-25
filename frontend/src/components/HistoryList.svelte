@@ -290,9 +290,6 @@
     &.completed {
       background: var(--color-success);
     }
-
-    position: relative;
-    overflow: hidden;
   }
 
   .progress-stats {

@@ -11,7 +11,6 @@ from plexapi.server import PlexServer
 import database
 import downloader
 from dotenv import load_dotenv
-import qbittorrentapi
 
 env_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(env_path)
@@ -23,12 +22,12 @@ DOWNLOAD_DIR_2 = os.getenv('DOWNLOAD_DIR_2', 'E:\\Torrent')
 
 # Pre-compiled regex patterns for performance
 RE_TV_TITLE = re.compile(r'\((?:Season \d+|S\d+E\d+)\)', re.IGNORECASE)
-RE_S_NUM = re.compile(r'\bS(\d{1,2})\b', re.IGNORECASE)
-RE_E_NUM = re.compile(r'\bE(\d{1,2})\b', re.IGNORECASE)
+RE_S_NUM = downloader.RE_S_NUM
+RE_E_NUM = downloader.RE_E_NUM
 
 _100_GB = 100 * 1024 * 1024 * 1024
 
-# (threading imported at top)
+
 
 
 def _extract_best_release_date(tmdb_id: Optional[str]) -> Optional[str]:
@@ -76,6 +75,14 @@ class WatchlistRunContext:
 
     def mark_recorded(self, aither_id: str) -> None:
         self.recorded_ids.add(str(aither_id))
+
+    def get_poster(self, show_title: str, tmdb_id: Optional[str]) -> Optional[str]:
+        """Return cached poster_path, fetching from TMDB on first call per show."""
+        if tmdb_id in self.tv_show_cache:
+            return self.tv_show_cache[tmdb_id]
+        poster_path = track_tv_show(show_title, tmdb_id)
+        self.tv_show_cache[tmdb_id] = poster_path
+        return poster_path
 
 def _do_delayed_remove(account: MyPlexAccount, item) -> None:
     time.sleep(10)
@@ -305,11 +312,7 @@ def _fetch_show_data(
     ctx: WatchlistRunContext,
 ) -> Tuple[Optional[str], List[int], Set[Tuple[int, int]], Dict[str, Any]]:
     """Fetch all data needed to process a TV show, using per-run caches."""
-    if tmdb_id in ctx.tv_show_cache:
-        poster_path = ctx.tv_show_cache[tmdb_id]
-    else:
-        poster_path = track_tv_show(title, tmdb_id)
-        ctx.tv_show_cache[tmdb_id] = poster_path
+    poster_path = ctx.get_poster(title, tmdb_id)
 
     if title in ctx.watched_status_cache:
         watched_seasons, watched_episodes = ctx.watched_status_cache[title]
@@ -429,11 +432,7 @@ def queue_tv_item(t_dict: Dict[str, Any], save_name: str, tmdb_id: Optional[str]
 
 def process_season(item, account: MyPlexAccount, title: str, tmdb_id: Optional[str], ctx: WatchlistRunContext):
     show_title = getattr(item, 'parentTitle', title)
-    if tmdb_id in ctx.tv_show_cache:
-        poster_path = ctx.tv_show_cache[tmdb_id]
-    else:
-        poster_path = track_tv_show(show_title, tmdb_id)
-        ctx.tv_show_cache[tmdb_id] = poster_path
+    poster_path = ctx.get_poster(show_title, tmdb_id)
 
     season_num = getattr(item, 'index', 1)
     print(f"Processing explicit Season Watchlist: {show_title} Season {season_num}")
@@ -453,11 +452,7 @@ def process_season(item, account: MyPlexAccount, title: str, tmdb_id: Optional[s
 
 def process_episode(item, account: MyPlexAccount, title: str, tmdb_id: Optional[str], ctx: WatchlistRunContext):
     show_title = getattr(item, 'grandparentTitle', title)
-    if tmdb_id in ctx.tv_show_cache:
-        poster_path = ctx.tv_show_cache[tmdb_id]
-    else:
-        poster_path = track_tv_show(show_title, tmdb_id)
-        ctx.tv_show_cache[tmdb_id] = poster_path
+    poster_path = ctx.get_poster(show_title, tmdb_id)
 
     season_num = getattr(item, 'parentIndex', 1)
     episode_num = getattr(item, 'index', 1)

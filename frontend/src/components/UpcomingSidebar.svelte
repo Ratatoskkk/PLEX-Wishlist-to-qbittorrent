@@ -26,20 +26,15 @@
     return copy;
   })());
 
-  let now = $state(new Date().getTime());
-  let rafId: number;
-
-  function loop() {
-    now = new Date().getTime();
-    rafId = requestAnimationFrame(loop);
-  }
+  let now = $state(Date.now());
+  let tickInterval: ReturnType<typeof setInterval>;
 
   onMount(() => {
-    rafId = requestAnimationFrame(loop);
+    tickInterval = setInterval(() => { now = Date.now(); }, 1000);
   });
 
   onDestroy(() => {
-    cancelAnimationFrame(rafId);
+    clearInterval(tickInterval);
   });
 
   async function toggleStatus(id: number) {
@@ -131,11 +126,9 @@
 
 <style lang="scss">
   .sidebar {
-    width: 340px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    flex-shrink: 0;
   }
   
   .header {

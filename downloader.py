@@ -24,6 +24,7 @@ RE_E_NUM = re.compile(r'\bE(\d{1,2})\b', re.IGNORECASE)
 RE_SE_NUM = re.compile(r'\bS(\d{1,2})[ .]?E(\d{1,2})\b', re.IGNORECASE)
 RE_SEASON = re.compile(r'\(?Season\s+(\d+)\)?', re.IGNORECASE)
 RE_WORDS = re.compile(r'\w+')
+RE_SE_IDENTIFIER = re.compile(r'^s\d+(e\d+)?$')
 
 # Shared API headers for Aither requests
 _AITHER_HEADERS = {
@@ -315,12 +316,12 @@ def get_active_downloads_status(
 
             # 2. Word-subset heuristic fallback
             if not matched:
+                identifiers = {w for w in plex_words if RE_SE_IDENTIFIER.match(w)}
                 for t, t_words in precomputed:
                     if plex_words.issubset(t_words):
                         matched = t
                         break
                     # Edge-case: show names that differ in common words (e.g. "Electric Dreams")
-                    identifiers = {w for w in plex_words if re.match(r'^s\d+(e\d+)?$', w)}
                     if identifiers and identifiers.issubset(t_words):
                         non_id = plex_words - identifiers
                         overlap = non_id.intersection(t_words)

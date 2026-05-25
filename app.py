@@ -69,14 +69,17 @@ bg_scheduler.start()
 # ---------------------------------------------------------------------------
 # Startup: one-time watched-status scan
 # ---------------------------------------------------------------------------
-def _scan_watched_on_startup() -> None:
-    """Run once at startup: check all completed downloads against Plex watched status."""
-    import time as _time
-    _time.sleep(5)  # give Plex connection a moment to settle
+_cleanup_scan_lock = threading.Lock()
+
+def _run_watched_scan() -> None:
+    """Check all completed downloads against Plex watched status and update DB flags."""
+    if not _cleanup_scan_lock.acquire(blocking=False):
+        print("[Cleanup] Scan already running, skipping.")
+        return
     try:
         plex = scheduler.get_plex_server()
         if not plex:
-            print("[Cleanup] Plex unavailable at startup — skipping watched scan.")
+            print("[Cleanup] Plex unavailable — skipping watched scan.")
             return
         completed = database.get_completed_downloads()
         if not completed:
@@ -92,7 +95,6 @@ def _scan_watched_on_startup() -> None:
                         watched = True
                         break
                     if r_type in ('show', 'episode'):
-                        # For shows/seasons check all episodes
                         try:
                             eps = result.episodes()
                             if eps and all(e.isWatched for e in eps):
@@ -103,9 +105,15 @@ def _scan_watched_on_startup() -> None:
                 database.mark_download_watched(dl['id'], watched)
             except Exception as e:
                 print(f"[Cleanup] Error checking watched status for '{dl['title']}': {e}")
-        print("[Cleanup] Startup watched scan complete.")
+        print("[Cleanup] Watched scan complete.")
     except Exception as e:
-        print(f"[Cleanup] Startup scan error: {e}")
+        print(f"[Cleanup] Scan error: {e}")
+    finally:
+        _cleanup_scan_lock.release()
+
+def _scan_watched_on_startup() -> None:
+    time.sleep(5)  # give Plex connection a moment to settle
+    _run_watched_scan()
 
 threading.Thread(target=_scan_watched_on_startup, daemon=True).start()
 
@@ -343,8 +351,8 @@ def clear_history():
 # ---------------------------------------------------------------------------
 # Cleanup API
 # ---------------------------------------------------------------------------
-DOWNLOAD_DIR_1 = os.getenv('DOWNLOAD_DIR_1', 'D:\\Torrents')
-DOWNLOAD_DIR_2 = os.getenv('DOWNLOAD_DIR_2', 'E:\\Torrent')
+DOWNLOAD_DIR_1 = scheduler.DOWNLOAD_DIR_1
+DOWNLOAD_DIR_2 = scheduler.DOWNLOAD_DIR_2
 
 def _drive_label(save_path: str) -> str:
     """Return 'Drive 1', 'Drive 2', or 'Unknown' based on which dir the path starts with."""
@@ -376,6 +384,15 @@ def get_cleanup_list():
             'resolution': dl['resolution'] or 'Unknown',
         })
     return jsonify(result)
+
+
+@app.route('/api/cleanup/scan', methods=['POST'])
+def trigger_cleanup_scan():
+    """Manually trigger a watched-status scan against Plex."""
+    if not _cleanup_scan_lock.locked():
+        threading.Thread(target=_run_watched_scan, daemon=True).start()
+        return jsonify({"success": True, "message": "Cleanup scan started."})
+    return jsonify({"success": False, "message": "Scan already in progress."}), 409
 
 
 @app.route('/api/cleanup/<int:download_id>', methods=['POST'])
