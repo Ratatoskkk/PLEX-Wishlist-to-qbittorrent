@@ -148,7 +148,7 @@
     
     button {
       padding: 6px 12px;
-      font-family: var(--font-display);
+      font-family: var(--font-primary);
       font-size: 14px;
     }
   }

@@ -14,7 +14,7 @@
   const displayed: Record<string, number> = {};
 
   // Reactive display state written to from rAF
-  let smoothProgress = $state<Record<string, number>>({});
+  let smoothProgress: Record<string, number> = $state({});
 
   let rafId: number;
 
@@ -173,7 +173,7 @@
     padding: 48px;
     text-align: center;
     color: var(--border-strong);
-    font-family: var(--font-body);
+    font-family: var(--font-primary);
     font-style: italic;
     font-size: 19.2px;
   }
@@ -232,7 +232,7 @@
     }
 
     .title-text { 
-      font-family: var(--font-display);
+      font-family: var(--font-primary);
       font-weight: 400; 
       font-size: 16px;
     }
@@ -264,6 +264,7 @@
     &.completed        { background: rgba(31, 138, 101, 0.1); color: var(--color-success); }
     &.queued           { background: var(--surface-300); color: var(--border-strong); }
     &.error, &.denied  { background: rgba(207, 45, 86, 0.1);  color: var(--color-error); }
+    &.insufficient_space { background: rgba(192, 133, 50, 0.15); color: #c08532; }
   }
 
   .progress-container {
@@ -278,7 +279,6 @@
     background: var(--border-primary);
     border-radius: 2px;
     overflow: hidden;
-    will-change: contents;
   }
 
   .progress-fill {

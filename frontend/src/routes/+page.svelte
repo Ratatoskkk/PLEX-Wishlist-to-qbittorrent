@@ -6,7 +6,7 @@
   import UpcomingSidebar from '../components/UpcomingSidebar.svelte';
   import CleanupSidebar from '../components/CleanupSidebar.svelte';
 
-  let state: AppState = $state({
+  let appState: AppState = $state({
     downloads: [],
     pending_groups: {},
     pending_count: 0,
@@ -28,7 +28,7 @@
     try {
       const res = await fetch('/api/state');
       if (res.ok) {
-        state = await res.json();
+        appState = await res.json();
       }
     } catch (err) {
       console.error('Failed to fetch state:', err);
@@ -105,7 +105,7 @@
 
 <div class="app-layout">
   <div class="left-column">
-    <UpcomingSidebar upcoming={state.upcoming || []} onAction={fetchState} />
+    <UpcomingSidebar upcoming={appState.upcoming || []} onAction={fetchState} />
   </div>
   
   <div class="dashboard">
@@ -116,7 +116,7 @@
     <div class="right-section">
       <div class="status-item">
         <span class="label">Last Checked:</span>
-        <span class="value">{state.last_check}</span>
+        <span class="value">{appState.last_check}</span>
       </div>
       {#if Object.keys(liveProgress).length > 0}
         <div class="status-item live-indicator">
@@ -124,10 +124,10 @@
           <span class="label">Live</span>
         </div>
       {/if}
-      {#if state.last_error}
+      {#if appState.last_error}
         <div class="status-item error">
           <span class="label">Error:</span>
-          <span class="value">{state.last_error}</span>
+          <span class="value">{appState.last_error}</span>
         </div>
       {/if}
       <button class="check-now" onclick={triggerPollNow} disabled={isPolling}>
@@ -141,10 +141,10 @@
   </section>
 
   <div class="dashboard-split">
-    {#if state.pending_count > 0}
+    {#if appState.pending_count > 0}
       <section class="pending-section">
         <div class="pending-grid">
-          {#each Object.entries(state.pending_groups) as [rootTitle, items]}
+          {#each Object.entries(appState.pending_groups) as [rootTitle, items]}
             <PendingCard title={rootTitle} {items} onAction={fetchState} />
           {/each}
         </div>
@@ -156,7 +156,7 @@
         <h2>Active &amp; History</h2>
         <button class="danger" onclick={clearHistory}>Clear Completed</button>
       </div>
-      <HistoryList downloads={state.downloads} {liveProgress} />
+      <HistoryList downloads={appState.downloads} {liveProgress} />
     </section>
   </div>
   </div>
@@ -174,7 +174,6 @@
     align-items: stretch;
     height: 100vh;
     padding: 2rem;
-    box-sizing: border-box;
     overflow: hidden;
 
     @media (max-width: 1200px) {

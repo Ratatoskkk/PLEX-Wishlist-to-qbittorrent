@@ -44,13 +44,13 @@
 
   function getFormattedDate(airDateStr: string) {
     const target = new Date(airDateStr);
-    const now = new Date();
+    const today = new Date();
     
     const day = target.getDate();
     const monthName = target.toLocaleString('default', { month: 'short' });
     
     // Add year only if it's next year (or later)
-    if (target.getFullYear() > now.getFullYear()) {
+    if (target.getFullYear() > today.getFullYear()) {
       return `${day} ${monthName} ${target.getFullYear()}`;
     }
     return `${day} ${monthName}`;
