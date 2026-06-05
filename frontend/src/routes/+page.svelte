@@ -225,6 +225,13 @@
     flex-direction: column;
     gap: 2rem;
     height: 100%;
+
+    @media (max-width: 1200px) {
+      order: -1;
+      height: auto;
+      flex: none;
+      width: 100%;
+    }
   }
 
   .dashboard-split {
@@ -241,6 +248,11 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+
+    @media (max-width: 1200px) {
+      flex: none;
+      max-height: 60vh;
+    }
   }
 
   .status-bar {
@@ -259,6 +271,10 @@
     .logo {
       height: 96px; 
       width: auto;
+
+      @media (max-width: 1200px) {
+        height: 64px;
+      }
     }
 
     .right-section {
@@ -266,6 +282,12 @@
       align-items: center;
       gap: 2rem;
       flex-wrap: wrap;
+
+      @media (max-width: 1200px) {
+        width: 100%;
+        justify-content: space-between;
+        gap: 1rem;
+      }
     }
 
     .status-item {
@@ -331,6 +353,11 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+
+    @media (max-width: 1200px) {
+      flex: none;
+      max-height: 60vh;
+    }
   }
 
   .check-now {
