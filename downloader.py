@@ -34,6 +34,28 @@ _AITHER_HEADERS = {
 }
 
 
+def _cache_unless_empty(fn):
+    """Cache results only when non-empty. Prevents caching failed lookups permanently."""
+    cache: Dict[Tuple, Any] = {}
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        key = args + tuple(sorted(kwargs.items()))
+        if key in cache:
+            return cache[key]
+        result = fn(*args, **kwargs)
+        is_empty = (
+            result is None
+            or result == {"seasons": {}, "episodes": {}}
+            or (isinstance(result, dict) and not result)
+        )
+        if not is_empty:
+            cache[key] = result
+        return result
+    wrapper.cache = cache
+    wrapper.cache_clear = lambda: cache.clear()
+    return wrapper
+
+
 def get_qbt_client() -> qbittorrentapi.Client:
     """Dependency injection for qBittorrent client."""
     qbt_client = qbittorrentapi.Client(
@@ -45,21 +67,25 @@ def get_qbt_client() -> qbittorrentapi.Client:
     return qbt_client
 
 
-@functools.lru_cache(maxsize=64)
+@_cache_unless_empty
 def search_aither(title: str, tmdb_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Search Aither API for the optimal movie torrent."""
-    params: Dict[str, str] = {'perPage': '100', 'sortField': 'size', 'sortDirection': 'desc'}
-    if tmdb_id:
-        params['tmdbId'] = str(tmdb_id)
-    else:
-        params['name'] = title
-
-    try:
+    def _fetch(params: Dict[str, str]) -> List[Dict[str, Any]]:
         response = requests.get(AITHER_URL, headers=_AITHER_HEADERS, params=params, timeout=15)
         response.raise_for_status()
         data = response.json().get('data', [])
         if isinstance(data, dict) and 'data' in data:
-            data = data['data']
+            return data['data']
+        return data
+
+    try:
+        data = []
+        base_params = {'perPage': '100', 'sortField': 'size', 'sortDirection': 'desc'}
+        if tmdb_id:
+            data = _fetch({**base_params, 'tmdbId': str(tmdb_id)})
+        if not data:
+            data = _fetch({**base_params, 'name': title})
+            
         return filter_best_torrent(data)
     except Exception as e:
         print(f"Error querying Aither for {title}: {e}")
@@ -184,28 +210,33 @@ def parse_tv_torrents(
     return seasons, episodes
 
 
-@functools.lru_cache(maxsize=64)
+@_cache_unless_empty
 def search_aither_tv(title: str, tmdb_id: Optional[str] = None) -> Dict[str, Any]:
     """Find and rank the best season packs and episodes for a TV show on Aither."""
-    params: Dict[str, str] = {'perPage': '100'}
-    if tmdb_id:
-        params['tmdbId'] = str(tmdb_id)
-    else:
-        params['name'] = title
-
-    try:
+    def _fetch(params: Dict[str, str]) -> List[Dict[str, Any]]:
         response = requests.get(AITHER_URL, headers=_AITHER_HEADERS, params=params, timeout=15)
         response.raise_for_status()
         data = response.json().get('data', [])
         if isinstance(data, dict) and 'data' in data:
-            data = data['data']
+            return data['data']
+        return data
+
+    try:
+        data = []
+        if tmdb_id:
+            data = _fetch({'tmdbId': str(tmdb_id), 'perPage': '100'})
+            if data:
+                print(f"[Aither] Found {len(data)} results for '{title}' via TMDB ID {tmdb_id}")
+        if not data:
+            data = _fetch({'name': title, 'perPage': '100'})
+            print(f"[Aither] Found {len(data)} results for '{title}' via title search (TMDB lookup returned 0)")
 
         seasons, episodes = parse_tv_torrents(data)
         best_seasons = {s: best for s, ts in seasons.items() if (best := score_torrents(ts))}
         best_episodes = {key: best for key, es in episodes.items() if (best := score_torrents(es))}
         return {"seasons": best_seasons, "episodes": best_episodes}
     except Exception as e:
-        print(f"Error searching Aither TV (TMDB {tmdb_id}): {e}")
+        print(f"Error searching Aither TV (TMDB {tmdb_id} / Title {title}): {e}")
         return {"seasons": {}, "episodes": {}}
 
 
