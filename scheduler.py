@@ -182,9 +182,13 @@ def process_movie(item, account: MyPlexAccount, title: str, tmdb_id: Optional[st
     delayed_remove_from_watchlist(account, item)
     print(f"Processed and queued {title} from watchlist.")
 
-def get_watched_status(plex: Optional[PlexServer], title: str) -> Tuple[List[int], Set[Tuple[int, int]]]:
-    watched_seasons = []
-    watched_episodes = set()
+def get_watched_status(
+    plex: Optional[PlexServer],
+    title: str,
+    tmdb_id: Optional[str] = None,
+) -> Tuple[List[int], Set[Tuple[int, int]]]:
+    watched_seasons: List[int] = []
+    watched_episodes: Set[Tuple[int, int]] = set()
     if not plex:
         return watched_seasons, watched_episodes
     
@@ -199,15 +203,27 @@ def get_watched_status(plex: Optional[PlexServer], title: str) -> Tuple[List[int
         episodes = local_show.episodes()
         if not episodes:
             return watched_seasons, watched_episodes
-            
-        season_counts = {}
-        watched_counts = {}
+
+        # Build TMDB episode-count map so we know how many episodes a
+        # season is *supposed* to have, not just how many Plex has locally.
+        tmdb_season_counts: Dict[int, int] = {}
+        if tmdb_id:
+            tmdb_details = downloader.fetch_tmdb_tv_details(tmdb_id)
+            if tmdb_details:
+                for s_info in tmdb_details.get('seasons', []):
+                    s_num = s_info.get('season_number', 0)
+                    if s_num > 0:
+                        tmdb_season_counts[s_num] = s_info.get('episode_count', 0)
+
+        season_counts: Dict[int, int] = {}
+        watched_counts: Dict[int, int] = {}
         max_local_season = 0
         
         for ep in episodes:
             s = ep.parentIndex
             e = ep.index
-            if s == 0: continue
+            if s == 0:
+                continue
             
             if s not in season_counts:
                 season_counts[s] = 0
@@ -225,14 +241,19 @@ def get_watched_status(plex: Optional[PlexServer], title: str) -> Tuple[List[int
             if s not in existing_seasons:
                 watched_seasons.append(s)
                 
-        for s, total in season_counts.items():
-            if total > 0 and watched_counts[s] == total:
+        for s, local_total in season_counts.items():
+            watched = watched_counts.get(s, 0)
+            # Use TMDB episode count as ground truth when available;
+            # fall back to local Plex count if TMDB data is missing.
+            expected_total = tmdb_season_counts.get(s, local_total)
+            if expected_total > 0 and watched >= expected_total:
                 watched_seasons.append(s)
                 
     except Exception as e:
         print(f"Error checking local Plex explicitly for {title}: {e}")
         
     return watched_seasons, watched_episodes
+
 
 def is_already_downloaded(relevant_qbt_names: List[str], s_num: int, e_num: Optional[int] = None) -> bool:
     re_episode = None
@@ -317,7 +338,7 @@ def _fetch_show_data(
     if title in ctx.watched_status_cache:
         watched_seasons, watched_episodes = ctx.watched_status_cache[title]
     else:
-        watched_seasons, watched_episodes = get_watched_status(plex, title)
+        watched_seasons, watched_episodes = get_watched_status(plex, title, tmdb_id)
         ctx.watched_status_cache[title] = (watched_seasons, watched_episodes)
 
     available_data = downloader.search_aither_tv(title, tmdb_id)
