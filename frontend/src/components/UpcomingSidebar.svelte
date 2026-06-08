@@ -13,16 +13,43 @@
 
   const sorted = $derived((() => {
     const copy = [...upcoming];
-    if (sortKey === 'date') {
-      // air_date ascending: aired (past) first, then soonest future, nulls last
-      copy.sort((a, b) => {
+    
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
+    
+    copy.sort((a, b) => {
+      const aIgnored = a.status === 'ignored';
+      const bIgnored = b.status === 'ignored';
+      if (aIgnored !== bIgnored) {
+        return aIgnored ? 1 : -1;
+      }
+      
+      if (sortKey === 'date') {
         const da = a.air_date || '9999-99-99';
         const db = b.air_date || '9999-99-99';
-        return da.localeCompare(db);
-      });
-    } else {
-      copy.sort((a, b) => a.show_title.localeCompare(b.show_title));
-    }
+        
+        if (da === '9999-99-99' && db !== '9999-99-99') return 1;
+        if (db === '9999-99-99' && da !== '9999-99-99') return -1;
+        if (da === db) return 0;
+        
+        const aFuture = da >= todayStr;
+        const bFuture = db >= todayStr;
+        
+        if (aFuture && !bFuture) return -1;
+        if (!aFuture && bFuture) return 1;
+        
+        if (aFuture && bFuture) {
+          return da.localeCompare(db);
+        } else {
+          return db.localeCompare(da);
+        }
+      } else {
+        return a.show_title.localeCompare(b.show_title);
+      }
+    });
     return copy;
   })());
 

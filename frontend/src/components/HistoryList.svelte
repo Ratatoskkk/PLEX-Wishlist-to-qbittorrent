@@ -9,6 +9,62 @@
   }
   let { downloads, liveProgress }: Props = $props();
 
+  // Sorting state (avoid generics/inline types on runes to prevent esrap compiler crash)
+  let sortField = $state('default');
+  let sortDir = $state('asc');
+
+  function handleSort(field: string) {
+    if (sortField === field) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortField = field;
+      sortDir = 'asc';
+    }
+  }
+
+  // Filter out pending_approval downloads
+  const filtered = $derived(downloads.filter(dl => dl.status !== 'pending_approval'));
+
+  // Sort downloads: default priority (downloading -> queued -> insufficient_space -> error -> completed)
+  const sortedDownloads = $derived((() => {
+    const list = [...filtered];
+    
+    const statusWeight: Record<string, number> = {
+      'downloading': 1,
+      'queued': 2,
+      'insufficient_space': 3,
+      'error': 4,
+      'completed': 5,
+    };
+
+    list.sort((a, b) => {
+      if (sortField === 'title') {
+        const cmp = a.title.localeCompare(b.title);
+        return sortDir === 'asc' ? cmp : -cmp;
+      } else if (sortField === 'status') {
+        const wa = statusWeight[a.status] ?? 99;
+        const wb = statusWeight[b.status] ?? 99;
+        if (wa !== wb) {
+          return sortDir === 'asc' ? wa - wb : wb - wa;
+        }
+        return b.added_date.localeCompare(a.added_date);
+      } else if (sortField === 'added') {
+        const cmp = a.added_date.localeCompare(b.added_date);
+        return sortDir === 'asc' ? cmp : -cmp;
+      } else {
+        // 'default' sorting: downloading to completed (status weight), secondary by added_date descending
+        const wa = statusWeight[a.status] ?? 99;
+        const wb = statusWeight[b.status] ?? 99;
+        if (wa !== wb) {
+          return wa - wb;
+        }
+        return b.added_date.localeCompare(a.added_date);
+      }
+    });
+
+    return list;
+  })());
+
   // Smoothed values driven by rAF — plain object, not reactive (avoids batching lag)
   const targets: Record<string, number> = {};
   const displayed: Record<string, number> = {};
@@ -82,20 +138,41 @@
 </script>
 
 <div class="history-list">
-  {#if downloads.length === 0}
+  {#if sortedDownloads.length === 0}
     <div class="empty-state">No active or historical downloads found.</div>
   {:else}
     <table>
       <thead>
         <tr>
-          <th>Title</th>
-          <th>Status</th>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <th onclick={() => handleSort('title')} class="sortable">
+            Title
+            {#if sortField === 'title'}
+              <span class="sort-arrow">{sortDir === 'asc' ? '▲' : '▼'}</span>
+            {/if}
+          </th>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <th onclick={() => handleSort('status')} class="sortable">
+            Status
+            {#if sortField === 'status'}
+              <span class="sort-arrow">{sortDir === 'asc' ? '▲' : '▼'}</span>
+            {/if}
+          </th>
           <th class="progress-th">Progress</th>
-          <th>Added</th>
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <th onclick={() => handleSort('added')} class="sortable">
+            Added
+            {#if sortField === 'added'}
+              <span class="sort-arrow">{sortDir === 'asc' ? '▲' : '▼'}</span>
+            {/if}
+          </th>
         </tr>
       </thead>
       <tbody>
-        {#each downloads as dl (dl.id)}
+        {#each sortedDownloads as dl (dl.id)}
           {@const live = getLive(dl.id)}
           {@const progress = getProgress(dl)}
           {@const eta = getEta(dl)}
@@ -192,6 +269,25 @@
       text-transform: uppercase;
       letter-spacing: 0.048px;
       border-bottom: 2px solid var(--border-primary);
+      transition: background 0.15s ease, color 0.15s ease;
+      
+      &.sortable {
+        cursor: pointer;
+        user-select: none;
+        
+        &:hover {
+          color: var(--cursor-dark);
+          background: var(--surface-400);
+        }
+      }
+    }
+
+    .sort-arrow {
+      font-size: 10px;
+      margin-left: 6px;
+      display: inline-block;
+      vertical-align: middle;
+      color: var(--color-accent);
     }
 
     td {
