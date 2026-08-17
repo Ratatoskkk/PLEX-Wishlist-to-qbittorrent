@@ -1,0 +1,14 @@
+# Normalise line endings. Text files are LF in the repository.
+* text=auto eol=lf
+
+# Windows needs CRLF in these, or the shell mis-reads them.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+
+# Never touch binaries.
+*.png binary
+*.ico binary
+*.jpg binary
+*.db binary
+*.torrent binary

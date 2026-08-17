@@ -1,0 +1,31 @@
+# Credentials and per-machine state. These never belong in the repository.
+.env
+config/conduit.toml
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+
+# Working notes, kept on disk only.
+REDESIGN.md
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Editors and tooling
+.claude/
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+desktop.ini
